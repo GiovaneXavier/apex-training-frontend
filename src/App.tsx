@@ -1,5 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { useAuth, dashboardPathFor } from './contexts/AuthContext';
+
 import Login from './pages/auth/Login';
 import Cadastro from './pages/auth/Cadastro';
 
@@ -19,26 +22,63 @@ import NutriDashboard from './pages/nutricionista/Dashboard';
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/cadastro" element={<Cadastro />} />
 
-      <Route path="/aluno/dashboard" element={<AlunoDashboard />} />
-      <Route path="/aluno/treino/:id" element={<AlunoTreino />} />
-      <Route path="/aluno/calendario" element={<AlunoCalendario />} />
-      <Route path="/aluno/rps" element={<AlunoRPs />} />
-      <Route path="/aluno/perfil" element={<AlunoPerfil />} />
+      <Route
+        path="/aluno/dashboard"
+        element={<ProtectedRoute roles={['ALUNO']}><AlunoDashboard /></ProtectedRoute>}
+      />
+      <Route
+        path="/aluno/treino/:id"
+        element={<ProtectedRoute roles={['ALUNO']}><AlunoTreino /></ProtectedRoute>}
+      />
+      <Route
+        path="/aluno/calendario"
+        element={<ProtectedRoute roles={['ALUNO']}><AlunoCalendario /></ProtectedRoute>}
+      />
+      <Route
+        path="/aluno/rps"
+        element={<ProtectedRoute roles={['ALUNO']}><AlunoRPs /></ProtectedRoute>}
+      />
+      <Route
+        path="/aluno/perfil"
+        element={<ProtectedRoute roles={['ALUNO']}><AlunoPerfil /></ProtectedRoute>}
+      />
 
-      <Route path="/professor/dashboard" element={<ProfDashboard />} />
-      <Route path="/professor/alunos" element={<ProfAlunos />} />
-      <Route path="/professor/aluno/:id" element={<ProfAlunoDetalhe />} />
-      <Route path="/professor/prescrever" element={<ProfPrescrever />} />
+      <Route
+        path="/professor/dashboard"
+        element={<ProtectedRoute roles={['PROFESSOR']}><ProfDashboard /></ProtectedRoute>}
+      />
+      <Route
+        path="/professor/alunos"
+        element={<ProtectedRoute roles={['PROFESSOR']}><ProfAlunos /></ProtectedRoute>}
+      />
+      <Route
+        path="/professor/aluno/:id"
+        element={<ProtectedRoute roles={['PROFESSOR']}><ProfAlunoDetalhe /></ProtectedRoute>}
+      />
+      <Route
+        path="/professor/prescrever"
+        element={<ProtectedRoute roles={['PROFESSOR']}><ProfPrescrever /></ProtectedRoute>}
+      />
 
-      <Route path="/nutri/dashboard" element={<NutriDashboard />} />
+      <Route
+        path="/nutri/dashboard"
+        element={<ProtectedRoute roles={['NUTRICIONISTA']}><NutriDashboard /></ProtectedRoute>}
+      />
 
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
+}
+
+function Home() {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user) return <Navigate to={dashboardPathFor(user.role)} replace />;
+  return <Navigate to="/login" replace />;
 }
 
 function NotFound() {
