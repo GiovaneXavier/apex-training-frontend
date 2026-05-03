@@ -1,0 +1,14 @@
+{
+  "name": "Apex Training",
+  "short_name": "Apex",
+  "description": "Sistema multi-sports de prescrição e execução de treinos",
+  "theme_color": "#0a0a0b",
+  "background_color": "#0a0a0b",
+  "display": "standalone",
+  "orientation": "portrait",
+  "start_url": "/",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

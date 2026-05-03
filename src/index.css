@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ────────────────────────────────────────────────────────────
+   Theme tokens — Light Minimal (default) & Dark Atlético
+   Match workout-screen.jsx tokens exactly (T_LIGHT / T_DARK).
+   ──────────────────────────────────────────────────────────── */
+@layer base {
+  :root {
+    /* Light Minimal */
+    --bg:            250 250 249; /* #fafaf9 */
+    --surface:       255 255 255;
+    --surface-muted: 245 245 244;
+    --ink:           12 10 9;     /* #0c0a09 */
+    --ink-muted:     87 83 78;
+    --ink-subtle:    168 162 158;
+    --accent:        12 10 9;     /* primary action = ink */
+    --accent-ink:    250 250 249;
+    --success:       21 128 61;
+    --success-bg:    220 252 231;
+    --success-ink:   20 83 45;
+    --warn:          180 83 9;
+    --warn-bg:       254 243 199;
+    --pr:            161 98 7;
+    --pr-bg:         254 249 195;
+    --danger:        185 28 28;
+    --danger-bg:     254 226 226;
+    --border:        15 15 12;        /* with low alpha via /N */
+    --border-strong: 15 15 12;
+    --video-bg:      231 229 226;
+    --video-stripe:  214 211 209;
+  }
+
+  .dark {
+    /* Dark Atlético */
+    --bg:            10 10 11;    /* #0a0a0b */
+    --surface:       20 20 22;    /* #141416 */
+    --surface-muted: 28 28 31;
+    --ink:           250 250 249;
+    --ink-muted:     250 250 249; /* alpha 0.66 in usage */
+    --ink-subtle:    250 250 249; /* alpha 0.38 in usage */
+    --accent:        255 107 26;  /* #ff6b1a */
+    --accent-ink:    10 10 11;
+    --success:       163 230 53;  /* lime-400 */
+    --success-bg:    163 230 53;
+    --success-ink:   190 242 100;
+    --warn:          251 191 36;
+    --warn-bg:       251 191 36;
+    --pr:            255 107 26;
+    --pr-bg:         255 107 26;
+    --danger:        248 113 113;
+    --danger-bg:     248 113 113;
+    --border:        255 255 255;
+    --border-strong: 255 255 255;
+    --video-bg:      28 28 31;
+    --video-stripe:  38 38 42;
+  }
+
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Number cells use tabular figures */
+  .tabular { font-variant-numeric: tabular-nums; }
+}
+
+@layer utilities {
+  .text-mono { font-family: theme('fontFamily.mono'); }
+  .border-app    { border-color: rgb(var(--border) / 0.08); }
+  .border-app-strong { border-color: rgb(var(--border) / 0.14); }
+  .dark .border-app    { border-color: rgb(var(--border) / 0.08); }
+  .dark .border-app-strong { border-color: rgb(var(--border) / 0.16); }
+}
