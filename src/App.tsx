@@ -5,6 +5,7 @@ import { useAuth, dashboardPathFor } from './contexts/AuthContext';
 
 import Login from './pages/auth/Login';
 import Cadastro from './pages/auth/Cadastro';
+import StravaCallback from './pages/auth/StravaCallback';
 
 import AlunoDashboard from './pages/aluno/Dashboard';
 import AlunoTreino from './pages/aluno/Treino';
@@ -26,6 +27,7 @@ export default function App() {
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/cadastro" element={<Cadastro />} />
+      <Route path="/strava/callback" element={<StravaCallback />} />
 
       <Route
         path="/aluno/dashboard"
