@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { listTreinos } from '@/lib/api/treinos';
 import { apiErrorMessage } from '@/lib/api';
+import { buildStravaAuthUrl, getStravaStatus, syncStrava, type StravaStatus } from '@/lib/api/strava';
 import { formatDate, relativeDay } from '@/lib/format';
 import { MODALIDADE_LABEL, STATUS_LABEL, type Treino } from '@/types/treino';
 import { cn } from '@/lib/utils';
@@ -14,15 +15,43 @@ export default function AlunoDashboard() {
   const { theme, toggle } = useTheme();
   const [treinos, setTreinos] = useState<Treino[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [strava, setStrava] = useState<StravaStatus | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (!user?.aluno?.id) return;
     let cancelled = false;
-    listTreinos(user.aluno.id, { status: 'PENDENTE', limit: 20 })
-      .then((data) => !cancelled && setTreinos(data))
+    Promise.all([
+      listTreinos(user.aluno.id, { status: 'PENDENTE', limit: 20 }),
+      getStravaStatus().catch(() => null),
+    ])
+      .then(([t, s]) => {
+        if (cancelled) return;
+        setTreinos(t);
+        if (s) setStrava(s);
+      })
       .catch((err) => !cancelled && setError(apiErrorMessage(err)));
     return () => { cancelled = true; };
   }, [user?.aluno?.id]);
+
+  async function onSyncStrava() {
+    setError(null);
+    setInfo(null);
+    if (!strava?.connected) {
+      window.location.href = buildStravaAuthUrl();
+      return;
+    }
+    setSyncing(true);
+    try {
+      const r = await syncStrava();
+      setInfo(`${r.novas} ${r.novas === 1 ? 'nova atividade' : 'novas atividades'} sincronizadas`);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   const proximo = treinos?.[0];
   const restantes = treinos?.slice(1) ?? [];
@@ -52,13 +81,18 @@ export default function AlunoDashboard() {
 
       <section className="px-5">
         <button
-          disabled
-          className="w-full mb-5 h-12 rounded-[14px] bg-accent text-accent-ink font-bold text-[13px] tracking-wide flex items-center justify-center gap-2 disabled:opacity-60"
-          title="Sprint 5"
+          onClick={onSyncStrava}
+          disabled={syncing}
+          className="w-full mb-3 h-12 rounded-[14px] bg-accent text-accent-ink font-bold text-[13px] tracking-wide flex items-center justify-center gap-2 disabled:opacity-60"
         >
-          ⚡ Sincronizar com Strava
-          <span className="text-[10px] uppercase tracking-wider opacity-70">em breve</span>
+          ⚡ {syncing ? 'Sincronizando...' : strava?.connected ? 'Sincronizar com Strava' : 'Conectar Strava'}
+          {!strava?.connected && (
+            <span className="text-[10px] uppercase tracking-wider opacity-70">conectar</span>
+          )}
         </button>
+        {info && (
+          <div className="mb-3 px-3 py-2 rounded-[10px] bg-success-bg text-success-ink text-[11.5px] font-medium">{info}</div>
+        )}
 
         <h2 className="text-[11px] uppercase tracking-[0.6px] text-ink-subtle font-bold mb-3 text-mono">
           Próximo treino
