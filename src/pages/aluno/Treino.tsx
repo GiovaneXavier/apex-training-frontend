@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 
 import { WorkoutScreen } from '@/components/workout/WorkoutScreen';
+import { WorkoutLive } from '@/components/workout/WorkoutLive';
 import { PhoneFrame } from '@/components/workout/PhoneFrame';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getTreino } from '@/lib/api/treinos';
@@ -63,11 +64,6 @@ export default function AlunoTreino() {
     setParams(next, { replace: true });
   };
 
-  // Modos:
-  // 1. demo — DemoBar + WorkoutScreen com 5 variantes
-  // 2. real (musculacao) — WorkoutScreen base; integração de dados reais virá no S3
-  // 3. real (outras modalidades) — placeholder (renderização específica vem em sprints futuros)
-
   if (loading) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center text-ink-muted text-mono text-sm uppercase tracking-wider">
@@ -89,7 +85,19 @@ export default function AlunoTreino() {
     );
   }
 
-  if (!isDemo && treino && treino.detalhes.tipo !== 'musculacao') {
+  // Treino real: musculação → WorkoutLive (execução real com offline-first + RP)
+  if (!isDemo && treino && treino.detalhes.tipo === 'musculacao') {
+    return (
+      <div className="min-h-screen bg-bg text-ink">
+        <PhoneFrame dark={theme === 'dark'}>
+          <WorkoutLive treino={treino} theme={theme} density={density} />
+        </PhoneFrame>
+      </div>
+    );
+  }
+
+  // Treino real: outras modalidades → placeholder
+  if (!isDemo && treino) {
     return (
       <div className="min-h-screen bg-bg text-ink p-6">
         <Link to="/aluno/dashboard" className="text-mono text-[11px] uppercase tracking-wider text-ink-muted font-bold">
@@ -99,7 +107,7 @@ export default function AlunoTreino() {
           <h1 className="text-2xl font-bold tracking-tight mb-2">{treino.titulo}</h1>
           <p className="text-ink-muted text-sm mb-6">
             UI de execução para <b>{treino.detalhes.tipo}</b> chega num próximo sprint.
-            Por enquanto, este treino aparece no calendário e pode ser concluído manualmente.
+            Os dados estão prescritos e o treino aparece no calendário.
           </p>
           <pre className="text-mono text-[11px] bg-surface border border-app p-3 rounded-[10px] overflow-x-auto">
             {JSON.stringify(treino.detalhes, null, 2)}
@@ -109,13 +117,13 @@ export default function AlunoTreino() {
     );
   }
 
+  // Modo demo (id === 'demo'): DemoBar + WorkoutScreen com 5 variantes
   return (
     <div className="min-h-screen bg-bg text-ink">
       <DemoBar
         variant={variant}
         density={density}
         theme={theme}
-        showDemoLabel={isDemo}
         onVariant={setVariant}
         onDensity={setDensity}
         onTheme={toggle}
@@ -131,7 +139,6 @@ function DemoBar({
   variant,
   density,
   theme,
-  showDemoLabel,
   onVariant,
   onDensity,
   onTheme,
@@ -139,7 +146,6 @@ function DemoBar({
   variant: WorkoutVariant;
   density: DensityName;
   theme: 'light' | 'dark';
-  showDemoLabel: boolean;
   onVariant: (v: WorkoutVariant) => void;
   onDensity: (d: DensityName) => void;
   onTheme: () => void;
@@ -149,9 +155,7 @@ function DemoBar({
       <Link to="/aluno/dashboard" className="text-mono uppercase tracking-wider text-ink-subtle font-bold">
         ← Dashboard
       </Link>
-      {showDemoLabel && (
-        <span className="text-mono uppercase tracking-wider text-accent font-bold">Demo</span>
-      )}
+      <span className="text-mono uppercase tracking-wider text-accent font-bold">Demo</span>
       <div className="flex gap-1">
         {VARIANTS.map((v) => (
           <button
