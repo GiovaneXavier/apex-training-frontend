@@ -17,6 +17,7 @@ import ProfDashboard from './pages/professor/Dashboard';
 import ProfAlunos from './pages/professor/Alunos';
 import ProfAlunoDetalhe from './pages/professor/AlunoDetalhe';
 import ProfPrescrever from './pages/professor/Prescrever';
+import ProfCalendario from './pages/professor/Calendario';
 
 import NutriDashboard from './pages/nutricionista/Dashboard';
 import NutriAlunoDetalhe from './pages/nutricionista/AlunoDetalhe';
@@ -65,6 +66,10 @@ export default function App() {
       <Route
         path="/professor/prescrever"
         element={<ProtectedRoute roles={['PROFESSOR']}><ProfPrescrever /></ProtectedRoute>}
+      />
+      <Route
+        path="/professor/calendario"
+        element={<ProtectedRoute roles={['PROFESSOR']}><ProfCalendario /></ProtectedRoute>}
       />
 
       <Route
