@@ -1,5 +1,5 @@
 import { api } from '@/lib/api';
-import type { Treino, Prova } from '@/types/treino';
+import type { Treino, Prova, Modalidade, StatusTreino } from '@/types/treino';
 
 export type AlunoVinculado = {
   vinculoId: string;
@@ -66,5 +66,34 @@ export async function desvincular(vinculoId: string): Promise<void> {
 
 export async function getAlunoDetalhe(alunoId: string): Promise<AlunoDetalhe> {
   const { data } = await api.get<AlunoDetalhe>(`/professor/aluno/${alunoId}`);
+  return data;
+}
+
+export type CalendarioTreino = {
+  id: string;
+  alunoId: string;
+  alunoNome: string;
+  modalidade: Modalidade;
+  titulo: string;
+  status: StatusTreino;
+  dataAlvo: string;
+};
+
+export type CalendarioProva = {
+  id: string;
+  alunoId: string;
+  alunoNome: string;
+  modalidade: Modalidade;
+  nome: string;
+  data: string;
+};
+
+export type CalendarioResponse = {
+  treinos: CalendarioTreino[];
+  provas: CalendarioProva[];
+};
+
+export async function getCalendarioProfessor(desde: string, ate: string): Promise<CalendarioResponse> {
+  const { data } = await api.get<CalendarioResponse>('/professor/calendario', { params: { desde, ate } });
   return data;
 }

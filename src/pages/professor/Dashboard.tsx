@@ -76,6 +76,14 @@ export default function ProfDashboard() {
             </span>
             <span className="text-ink-muted">→</span>
           </Link>
+          <Link to="/professor/calendario" className="action-card">
+            <span className="text-2xl">📅</span>
+            <span className="flex-1">
+              <span className="block text-[14px] font-bold tracking-tight">Calendário</span>
+              <span className="block text-[11.5px] text-ink-muted">Agenda mensal de todos os alunos</span>
+            </span>
+            <span className="text-ink-muted">→</span>
+          </Link>
         </div>
       </section>
 
