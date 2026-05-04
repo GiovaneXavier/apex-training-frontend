@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { AlunoTabs } from '@/components/AlunoTabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { apiErrorMessage } from '@/lib/api';
@@ -298,6 +299,8 @@ export default function AlunoPerfil() {
           Sair
         </button>
       </div>
+
+      <AlunoTabs />
     </div>
   );
 }
