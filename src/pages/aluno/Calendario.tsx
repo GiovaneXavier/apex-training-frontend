@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { AlunoTabs } from '@/components/AlunoTabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiErrorMessage } from '@/lib/api';
 import { listProvas } from '@/lib/api/provas';
@@ -138,6 +139,8 @@ export default function AlunoCalendario() {
 
         {diaSel && <DiaDetails key={diaSel} diaKey={diaSel} itens={itensDia(diaSel)} />}
       </div>
+
+      <AlunoTabs />
     </div>
   );
 }

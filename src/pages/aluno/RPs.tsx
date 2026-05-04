@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { AlunoTabs } from '@/components/AlunoTabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiErrorMessage } from '@/lib/api';
 import { listRPs, type RPGroup } from '@/lib/api/rps';
@@ -104,6 +105,8 @@ export default function AlunoRPs() {
           })}
         </div>
       </div>
+
+      <AlunoTabs />
     </div>
   );
 }
