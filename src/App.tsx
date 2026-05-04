@@ -18,6 +18,7 @@ import ProfAlunoDetalhe from './pages/professor/AlunoDetalhe';
 import ProfPrescrever from './pages/professor/Prescrever';
 
 import NutriDashboard from './pages/nutricionista/Dashboard';
+import NutriAlunoDetalhe from './pages/nutricionista/AlunoDetalhe';
 
 export default function App() {
   return (
@@ -67,6 +68,10 @@ export default function App() {
       <Route
         path="/nutri/dashboard"
         element={<ProtectedRoute roles={['NUTRICIONISTA']}><NutriDashboard /></ProtectedRoute>}
+      />
+      <Route
+        path="/nutri/aluno/:id"
+        element={<ProtectedRoute roles={['NUTRICIONISTA']}><NutriAlunoDetalhe /></ProtectedRoute>}
       />
 
       <Route path="*" element={<NotFound />} />
