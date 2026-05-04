@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -12,26 +12,59 @@ import {
   type VinculoNutricionistaItem,
   type VinculoProfessorItem,
 } from '@/lib/api/alunoVinculos';
-import { relativeDay } from '@/lib/format';
+import {
+  buildStravaAuthUrl,
+  disconnectStrava,
+  getStravaStatus,
+  listAtividadesStrava,
+  syncStrava,
+  type AtividadeStrava,
+  type StravaStatus,
+  type SyncResult,
+} from '@/lib/api/strava';
+import { formatDate, relativeDay } from '@/lib/format';
 
 export default function AlunoPerfil() {
   const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
+  const [params] = useSearchParams();
   const [nutris, setNutris] = useState<VinculoNutricionistaItem[]>([]);
   const [profs, setProfs] = useState<VinculoProfessorItem[]>([]);
+  const [strava, setStrava] = useState<StravaStatus | null>(null);
+  const [atividades, setAtividades] = useState<AtividadeStrava[]>([]);
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [busy, setBusy] = useState<'idle' | 'sync' | 'disconnect'>('idle');
 
   async function refresh() {
     try {
-      const [n, p] = await Promise.all([listMinhasNutris(), listMeusProfessores()]);
+      const [n, p, s] = await Promise.all([
+        listMinhasNutris(),
+        listMeusProfessores(),
+        getStravaStatus(),
+      ]);
       setNutris(n);
       setProfs(p);
+      setStrava(s);
+      if (s.connected && user?.aluno?.id) {
+        const ats = await listAtividadesStrava(user.aluno.id, 10);
+        setAtividades(ats);
+      } else {
+        setAtividades([]);
+      }
     } catch (err) {
       setError(apiErrorMessage(err));
     }
   }
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user?.aluno?.id]);
+
+  useEffect(() => {
+    const flag = params.get('strava');
+    if (flag === 'ok') setInfo('Strava conectado com sucesso!');
+    else if (flag === 'error') setError('Falha ao conectar Strava');
+  }, [params]);
 
   async function onAceitar(id: string) {
     try { await aceitarNutri(id); await refresh(); } catch (err) { setError(apiErrorMessage(err)); }
@@ -39,6 +72,40 @@ export default function AlunoPerfil() {
   async function onRecusar(id: string) {
     if (!confirm('Recusar/remover este nutricionista?')) return;
     try { await recusarNutri(id); await refresh(); } catch (err) { setError(apiErrorMessage(err)); }
+  }
+
+  function onConectarStrava() {
+    try { window.location.href = buildStravaAuthUrl(); }
+    catch (err) { setError(apiErrorMessage(err)); }
+  }
+
+  async function onSincronizar() {
+    setError(null);
+    setBusy('sync');
+    try {
+      const r = await syncStrava();
+      setSyncResult(r);
+      setInfo(`${r.novas} ${r.novas === 1 ? 'nova atividade' : 'novas atividades'} · ${r.total} retornadas`);
+      await refresh();
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setBusy('idle');
+    }
+  }
+
+  async function onDesconectar() {
+    if (!confirm('Desconectar do Strava? Seus tokens serão apagados.')) return;
+    setBusy('disconnect');
+    try {
+      await disconnectStrava();
+      await refresh();
+      setInfo('Strava desconectado');
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setBusy('idle');
+    }
   }
 
   return (
@@ -68,6 +135,9 @@ export default function AlunoPerfil() {
 
         {error && (
           <div className="px-3 py-2 mb-3 rounded-[10px] bg-danger-bg text-danger text-[12px] font-medium">{error}</div>
+        )}
+        {info && !error && (
+          <div className="px-3 py-2 mb-3 rounded-[10px] bg-success-bg text-success-ink text-[12px] font-medium">{info}</div>
         )}
 
         <Section title="Nutricionistas" subtitle="Aceite o convite para compartilhar sua rotina.">
@@ -141,13 +211,84 @@ export default function AlunoPerfil() {
         </Section>
 
         <Section title="Conexões" subtitle="Sincronize com plataformas externas.">
-          <div className="px-3 py-3 rounded-[14px] bg-surface border border-app flex items-center justify-between">
-            <div>
-              <div className="text-[13.5px] font-semibold">Strava</div>
-              <div className="text-[11px] text-ink-muted">Em breve · Sprint 5</div>
+          <div className="px-3 py-3 rounded-[14px] bg-surface border border-app">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="text-[13.5px] font-semibold flex items-center gap-1.5">
+                  <span className="text-orange-500">⚡</span> Strava
+                </div>
+                {strava?.connected ? (
+                  <div className="text-[11px] text-ink-muted">
+                    Conectado{strava.stravaUserId ? ` · ID ${strava.stravaUserId}` : ''}
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-ink-muted">Não conectado</div>
+                )}
+              </div>
+              <span
+                className={`text-mono text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${
+                  strava?.connected ? 'bg-success-bg text-success-ink' : 'bg-surface-muted text-ink-subtle'
+                }`}
+              >
+                {strava?.connected ? 'ativo' : 'desconectado'}
+              </span>
             </div>
-            <span className="text-mono text-[10px] uppercase font-bold tracking-wider text-ink-subtle">desconectado</span>
+
+            {strava?.connected ? (
+              <div className="flex gap-2">
+                <button
+                  onClick={onSincronizar}
+                  disabled={busy === 'sync'}
+                  className="flex-1 h-10 rounded-[10px] bg-accent text-accent-ink font-bold text-[12px] disabled:opacity-50"
+                >
+                  {busy === 'sync' ? 'Sincronizando...' : 'Sincronizar agora'}
+                </button>
+                <button
+                  onClick={onDesconectar}
+                  disabled={busy === 'disconnect'}
+                  className="h-10 px-4 rounded-[10px] bg-surface-muted text-danger text-[12px] font-bold uppercase tracking-wider disabled:opacity-50"
+                >
+                  Desconectar
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={onConectarStrava}
+                className="w-full h-10 rounded-[10px] bg-accent text-accent-ink font-bold text-[12px]"
+              >
+                Conectar Strava
+              </button>
+            )}
+
+            {syncResult && (
+              <div className="text-[11px] text-ink-muted mt-2 text-mono uppercase tracking-wider">
+                Última sync: {formatDate(syncResult.sincronizadoEm)} · {syncResult.novas} novas
+              </div>
+            )}
           </div>
+
+          {strava?.connected && atividades.length > 0 && (
+            <div className="mt-3">
+              <div className="text-[10px] uppercase tracking-[0.6px] text-ink-subtle font-bold text-mono mb-2">
+                Últimas atividades
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {atividades.map((a) => (
+                  <div key={a.id} className="px-3 py-2.5 rounded-[12px] bg-surface border border-app flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13px] font-semibold tracking-tight truncate">{a.nome}</div>
+                      <div className="text-mono text-[10px] uppercase text-ink-subtle font-bold tracking-wider">
+                        {a.tipo} · {relativeDay(a.iniciadoEm)}
+                      </div>
+                    </div>
+                    <div className="text-mono text-[12px] tabular text-ink font-bold flex-shrink-0">
+                      {(a.distanciaM / 1000).toFixed(1)}km
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </Section>
 
         <button
