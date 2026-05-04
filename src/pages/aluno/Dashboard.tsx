@@ -83,14 +83,32 @@ export default function AlunoDashboard() {
       <section className="px-5">
         <button
           onClick={onSyncStrava}
-          disabled={syncing}
-          className="w-full mb-3 h-12 rounded-[14px] bg-accent text-accent-ink font-bold text-[13px] tracking-wide flex items-center justify-center gap-2 disabled:opacity-60"
+          disabled={syncing || strava === null}
+          className="w-full mb-1.5 h-12 rounded-[14px] bg-accent text-accent-ink font-bold text-[13px] tracking-wide flex items-center justify-center gap-2 disabled:opacity-60"
         >
-          ⚡ {syncing ? 'Sincronizando...' : strava?.connected ? 'Sincronizar com Strava' : 'Conectar Strava'}
-          {!strava?.connected && (
-            <span className="text-[10px] uppercase tracking-wider opacity-70">conectar</span>
+          <span>⚡</span>
+          {strava === null
+            ? 'Carregando Strava...'
+            : syncing
+            ? 'Sincronizando...'
+            : strava.connected
+            ? 'Sincronizar com Strava'
+            : 'Conectar Strava'}
+          {strava?.connected && (
+            <span className="size-1.5 rounded-full bg-bg/70" />
           )}
         </button>
+        {strava?.connected ? (
+          <div className="mb-3 text-[10px] uppercase tracking-[0.6px] text-ink-subtle font-bold text-mono">
+            Conectado{strava.stravaUserId ? ` · ID ${strava.stravaUserId}` : ''}
+          </div>
+        ) : strava && !strava.connected ? (
+          <div className="mb-3 text-[10px] uppercase tracking-[0.6px] text-ink-subtle font-bold text-mono">
+            Não conectado · clique para autorizar no Strava
+          </div>
+        ) : (
+          <div className="mb-3 h-3" />
+        )}
         {info && (
           <div className="mb-3 px-3 py-2 rounded-[10px] bg-success-bg text-success-ink text-[11.5px] font-medium">{info}</div>
         )}
