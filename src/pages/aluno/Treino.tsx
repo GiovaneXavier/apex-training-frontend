@@ -3,7 +3,9 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 
 import { WorkoutScreen } from '@/components/workout/WorkoutScreen';
 import { WorkoutLive } from '@/components/workout/WorkoutLive';
+import { CorridaLive } from '@/components/workout/CorridaLive';
 import { PhoneFrame } from '@/components/workout/PhoneFrame';
+import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getTreino } from '@/lib/api/treinos';
 import { apiErrorMessage } from '@/lib/api';
@@ -32,6 +34,8 @@ export default function AlunoTreino() {
   const { id } = useParams<{ id: string }>();
   const [params, setParams] = useSearchParams();
   const { theme, toggle } = useTheme();
+  const { user } = useAuth();
+  const alunoIdAtual = user?.aluno?.id;
 
   const variantParam = params.get('variant');
   const densityParam = params.get('density');
@@ -94,6 +98,11 @@ export default function AlunoTreino() {
         </PhoneFrame>
       </div>
     );
+  }
+
+  // Treino real: corrida → CorridaLive (form de log + import Strava)
+  if (!isDemo && treino && treino.detalhes.tipo === 'corrida') {
+    return <CorridaLive treino={treino} alunoId={alunoIdAtual} />;
   }
 
   // Treino real: outras modalidades → placeholder
