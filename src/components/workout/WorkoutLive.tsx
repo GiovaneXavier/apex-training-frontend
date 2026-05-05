@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { getTheme, type DensityName, type ThemeName } from '@/themes/tokens';
 import { useExecucaoTreino } from '@/hooks/useExecucaoTreino';
 import { apiErrorMessage } from '@/lib/api';
+import { getHistoricoCargas, type HistoricoCarga } from '@/lib/api/treinos';
 import { formatDate } from '@/lib/format';
 import type { Treino, DetalhesMusculacao } from '@/types/treino';
 
@@ -29,6 +30,15 @@ export function WorkoutLive({ treino, theme, density = 'regular' }: Props) {
   const exec = useExecucaoTreino(treino);
 
   const [erroFinalizacao, setErroFinalizacao] = useState<string | null>(null);
+  const [historico, setHistorico] = useState<Record<string, HistoricoCarga>>({});
+
+  // Carrega histórico de cargas do aluno para os exercícios deste treino.
+  // Usa como sugestão quando a prescrição não traz cargaKg explícita.
+  useEffect(() => {
+    if (treino.detalhes.tipo !== 'musculacao') return;
+    const nomes = treino.detalhes.exercicios.map((e) => e.nome.toLowerCase());
+    getHistoricoCargas(nomes).then(setHistorico).catch(() => {});
+  }, [treino.id]);
 
   if (treino.detalhes.tipo !== 'musculacao') {
     return null; // Só musculação por enquanto
@@ -140,19 +150,30 @@ export function WorkoutLive({ treino, theme, density = 'regular' }: Props) {
           prSetIdxs={prSetIdxs}
         />
 
-        {!exercicioCompleto && (
-          <SaveSerieBar
-            t={t}
-            density={density}
-            serieNumero={exec.state.currentSet + 1}
-            totalSeries={exAtual.series}
-            cargaSugerida={exAtualPrescrito?.prescrito.cargaKg}
-            repsSugeridas={exAtualPrescrito?.prescrito.reps}
-            disabled={exec.state.syncStatus === 'syncing'}
-            onSalvar={exec.salvarSerie}
-            onPular={exec.pularSerie}
-          />
-        )}
+        {!exercicioCompleto && (() => {
+          const historicoEx = historico[exAtual.nome.toLowerCase()];
+          const cargaSugerida =
+            exAtualPrescrito?.prescrito.cargaKg
+            ?? historicoEx?.kg
+            ?? undefined;
+          const repsSugeridas =
+            exAtualPrescrito?.prescrito.reps
+            ?? historicoEx?.reps
+            ?? undefined;
+          return (
+            <SaveSerieBar
+              t={t}
+              density={density}
+              serieNumero={exec.state.currentSet + 1}
+              totalSeries={exAtual.series}
+              cargaSugerida={cargaSugerida ?? undefined}
+              repsSugeridas={repsSugeridas ?? undefined}
+              disabled={exec.state.syncStatus === 'syncing'}
+              onSalvar={exec.salvarSerie}
+              onPular={exec.pularSerie}
+            />
+          );
+        })()}
 
         {exercicioCompleto && !todosCompletos && (
           <NextExerciseBar t={t} density={density} onNext={exec.proximoExercicio} />

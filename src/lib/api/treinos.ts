@@ -39,3 +39,19 @@ export async function prescreverTreino(input: PrescreverInput): Promise<Treino> 
 export async function deleteTreino(treinoId: string): Promise<void> {
   await api.delete(`/treinos/${treinoId}`);
 }
+
+export type HistoricoCarga = {
+  kg: number | null;
+  reps: number | null;
+  dataAlvo: string;
+  treinoId: string;
+};
+
+// Mapa { nomeNormalizado(lowercase) -> última execução do aluno }
+export async function getHistoricoCargas(nomes: string[]): Promise<Record<string, HistoricoCarga>> {
+  if (nomes.length === 0) return {};
+  const { data } = await api.get<Record<string, HistoricoCarga>>('/treinos/historico-cargas', {
+    params: { nomes: nomes.join(',') },
+  });
+  return data;
+}
