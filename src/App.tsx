@@ -12,6 +12,7 @@ import AlunoTreino from './pages/aluno/Treino';
 import AlunoCalendario from './pages/aluno/Calendario';
 import AlunoRPs from './pages/aluno/RPs';
 import AlunoPerfil from './pages/aluno/Perfil';
+import AlunoEvolucao from './pages/aluno/Evolucao';
 
 import ProfDashboard from './pages/professor/Dashboard';
 import ProfAlunos from './pages/professor/Alunos';
@@ -51,6 +52,10 @@ export default function App() {
       <Route
         path="/aluno/perfil"
         element={<ProtectedRoute roles={['ALUNO']}><AlunoPerfil /></ProtectedRoute>}
+      />
+      <Route
+        path="/aluno/evolucao"
+        element={<ProtectedRoute roles={['ALUNO']}><AlunoEvolucao /></ProtectedRoute>}
       />
 
       <Route
