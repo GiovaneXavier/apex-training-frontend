@@ -5,6 +5,7 @@ import { WorkoutScreen } from '@/components/workout/WorkoutScreen';
 import { WorkoutLive } from '@/components/workout/WorkoutLive';
 import { CorridaLive } from '@/components/workout/CorridaLive';
 import { PhoneFrame } from '@/components/workout/PhoneFrame';
+import { ReagendarButton } from '@/components/ReagendarButton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getTreino } from '@/lib/api/treinos';
@@ -97,6 +98,13 @@ export default function AlunoTreino() {
         className="bg-bg text-ink"
         style={{ height: '100dvh', width: '100%', overflow: 'hidden' }}
       >
+        {treino.status !== 'CONCLUIDO' && treino.status !== 'PULADO' && (
+          <ReagendarButton
+            treinoId={treino.id}
+            dataAtual={treino.dataAlvo}
+            onReagendado={(iso) => setTreino({ ...treino, dataAlvo: iso })}
+          />
+        )}
         {/* Centraliza no desktop limitando a 480px; mobile ocupa 100% */}
         <div style={{ maxWidth: 480, height: '100%', margin: '0 auto', position: 'relative' }}>
           <WorkoutLive treino={treino} theme={theme} density={density} />
@@ -107,7 +115,18 @@ export default function AlunoTreino() {
 
   // Treino real: corrida → CorridaLive (form de log + import Strava)
   if (!isDemo && treino && treino.detalhes.tipo === 'corrida') {
-    return <CorridaLive treino={treino} alunoId={alunoIdAtual} />;
+    return (
+      <>
+        {treino.status !== 'CONCLUIDO' && treino.status !== 'PULADO' && (
+          <ReagendarButton
+            treinoId={treino.id}
+            dataAtual={treino.dataAlvo}
+            onReagendado={(iso) => setTreino({ ...treino, dataAlvo: iso })}
+          />
+        )}
+        <CorridaLive treino={treino} alunoId={alunoIdAtual} />
+      </>
+    );
   }
 
   // Treino real: outras modalidades → placeholder

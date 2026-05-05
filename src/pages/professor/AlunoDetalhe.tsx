@@ -3,13 +3,25 @@ import { Link, useParams } from 'react-router-dom';
 
 import { apiErrorMessage } from '@/lib/api';
 import { getAlunoDetalhe, type AlunoDetalhe } from '@/lib/api/professor';
+import { deleteRotina, listRotinas, DIA_SEMANA_LABEL, type Rotina } from '@/lib/api/rotinas';
 import { formatDate, relativeDay } from '@/lib/format';
 import { MODALIDADE_LABEL, type Treino } from '@/types/treino';
 
 export default function ProfAlunoDetalhe() {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<AlunoDetalhe | null>(null);
+  const [rotinas, setRotinas] = useState<Rotina[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  async function loadRotinas() {
+    if (!id) return;
+    try {
+      const r = await listRotinas({ alunoId: id });
+      setRotinas(r);
+    } catch {
+      // silencioso — seção opcional
+    }
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -17,8 +29,19 @@ export default function ProfAlunoDetalhe() {
     getAlunoDetalhe(id)
       .then((d) => !cancelled && setData(d))
       .catch((err) => !cancelled && setError(apiErrorMessage(err)));
+    loadRotinas();
     return () => { cancelled = true; };
   }, [id]);
+
+  async function onDeleteRotina(rotinaId: string) {
+    if (!confirm('Excluir esta rotina? Treinos pendentes gerados a partir dela também serão removidos.')) return;
+    try {
+      await deleteRotina(rotinaId);
+      loadRotinas();
+    } catch (err) {
+      alert(apiErrorMessage(err));
+    }
+  }
 
   return (
     <div className="min-h-screen bg-bg text-ink pb-24">
@@ -27,12 +50,20 @@ export default function ProfAlunoDetalhe() {
           ← Alunos
         </Link>
         {data && (
-          <Link
-            to={`/professor/prescrever?alunoId=${data.aluno.id}`}
-            className="text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full bg-accent text-accent-ink"
-          >
-            + Prescrever
-          </Link>
+          <div className="flex gap-1.5">
+            <Link
+              to={`/professor/rotina/nova?alunoId=${data.aluno.id}`}
+              className="text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full bg-accent text-accent-ink"
+            >
+              + Rotina
+            </Link>
+            <Link
+              to={`/professor/prescrever?alunoId=${data.aluno.id}`}
+              className="text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full bg-surface border border-app-strong text-ink"
+            >
+              + Avulso
+            </Link>
+          </div>
         )}
       </header>
 
@@ -67,6 +98,36 @@ export default function ProfAlunoDetalhe() {
               </div>
             </div>
           )}
+
+          <Section title={`Rotinas semanais (${rotinas.length})`}>
+            {rotinas.length === 0 ? (
+              <Empty msg="Nenhuma rotina ativa" />
+            ) : (
+              <div className="flex flex-col gap-2">
+                {rotinas.map((r) => (
+                  <div key={r.id} className="px-3 py-3 rounded-[12px] bg-surface border border-app">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="text-mono text-[10px] uppercase tracking-[0.6px] text-ink-subtle font-bold">
+                        {DIA_SEMANA_LABEL[r.diaSemana]} · {r.exercicios.length} exercícios
+                      </div>
+                      <div className="flex gap-2">
+                        <Link to={`/professor/rotina/${r.id}/editar`} className="text-[10px] uppercase tracking-wider font-bold text-accent">
+                          editar
+                        </Link>
+                        <button onClick={() => onDeleteRotina(r.id)} className="text-[10px] uppercase tracking-wider font-bold text-danger">
+                          excluir
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-[14px] font-semibold">{r.nome}</div>
+                    <div className="text-[11px] text-ink-subtle mt-0.5">
+                      {formatDate(r.vigenciaInicio)} → {r.vigenciaFim ? formatDate(r.vigenciaFim) : 'aberta'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Section>
 
           <Section title={`Pendentes (${data.treinosPendentes.length})`}>
             {data.treinosPendentes.length === 0 ? (

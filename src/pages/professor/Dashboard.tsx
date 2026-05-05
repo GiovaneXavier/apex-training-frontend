@@ -84,6 +84,22 @@ export default function ProfDashboard() {
             </span>
             <span className="text-ink-muted">→</span>
           </Link>
+          <Link to="/professor/rotina/nova" className="action-card">
+            <span className="text-2xl">🗓️</span>
+            <span className="flex-1">
+              <span className="block text-[14px] font-bold tracking-tight">Nova rotina</span>
+              <span className="block text-[11.5px] text-ink-muted">Treino semanal de musculação por aluno</span>
+            </span>
+            <span className="text-ink-muted">→</span>
+          </Link>
+          <Link to="/professor/exercicios" className="action-card">
+            <span className="text-2xl">🏋️</span>
+            <span className="flex-1">
+              <span className="block text-[14px] font-bold tracking-tight">Catálogo de exercícios</span>
+              <span className="block text-[11.5px] text-ink-muted">Biblioteca compartilhada</span>
+            </span>
+            <span className="text-ink-muted">→</span>
+          </Link>
         </div>
       </section>
 

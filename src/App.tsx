@@ -18,6 +18,8 @@ import ProfAlunos from './pages/professor/Alunos';
 import ProfAlunoDetalhe from './pages/professor/AlunoDetalhe';
 import ProfPrescrever from './pages/professor/Prescrever';
 import ProfCalendario from './pages/professor/Calendario';
+import ProfExercicios from './pages/professor/Exercicios';
+import ProfRotinaForm from './pages/professor/RotinaForm';
 
 import NutriDashboard from './pages/nutricionista/Dashboard';
 import NutriAlunoDetalhe from './pages/nutricionista/AlunoDetalhe';
@@ -70,6 +72,18 @@ export default function App() {
       <Route
         path="/professor/calendario"
         element={<ProtectedRoute roles={['PROFESSOR']}><ProfCalendario /></ProtectedRoute>}
+      />
+      <Route
+        path="/professor/exercicios"
+        element={<ProtectedRoute roles={['PROFESSOR']}><ProfExercicios /></ProtectedRoute>}
+      />
+      <Route
+        path="/professor/rotina/nova"
+        element={<ProtectedRoute roles={['PROFESSOR']}><ProfRotinaForm /></ProtectedRoute>}
+      />
+      <Route
+        path="/professor/rotina/:id/editar"
+        element={<ProtectedRoute roles={['PROFESSOR']}><ProfRotinaForm /></ProtectedRoute>}
       />
 
       <Route

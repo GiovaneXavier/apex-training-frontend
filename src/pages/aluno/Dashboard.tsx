@@ -10,11 +10,16 @@ import { buildStravaAuthUrl, getStravaStatus, syncStrava, type StravaStatus } fr
 import { formatDate, relativeDay } from '@/lib/format';
 import { MODALIDADE_LABEL, STATUS_LABEL, type Treino } from '@/types/treino';
 import { cn } from '@/lib/utils';
+import { iniciarTreinoDeRotina, rotinasDoDia, type Rotina } from '@/lib/api/rotinas';
+import { useNavigate } from 'react-router-dom';
 
 export default function AlunoDashboard() {
   const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
+  const navigate = useNavigate();
   const [treinos, setTreinos] = useState<Treino[] | null>(null);
+  const [rotinasHoje, setRotinasHoje] = useState<Rotina[]>([]);
+  const [iniciandoId, setIniciandoId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [strava, setStrava] = useState<StravaStatus | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -26,15 +31,30 @@ export default function AlunoDashboard() {
     Promise.all([
       listTreinos(user.aluno.id, { status: 'PENDENTE', limit: 20 }),
       getStravaStatus().catch(() => null),
+      rotinasDoDia(user.aluno.id).catch(() => []),
     ])
-      .then(([t, s]) => {
+      .then(([t, s, r]) => {
         if (cancelled) return;
         setTreinos(t);
         if (s) setStrava(s);
+        setRotinasHoje(r);
       })
       .catch((err) => !cancelled && setError(apiErrorMessage(err)));
     return () => { cancelled = true; };
   }, [user?.aluno?.id]);
+
+  async function onIniciarRotina(rotina: Rotina) {
+    setError(null);
+    setIniciandoId(rotina.id);
+    try {
+      const treino = await iniciarTreinoDeRotina(rotina.id);
+      navigate(`/aluno/treino/${treino.id}`);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setIniciandoId(null);
+    }
+  }
 
   async function onSyncStrava() {
     setError(null);
@@ -111,6 +131,24 @@ export default function AlunoDashboard() {
         )}
         {info && (
           <div className="mb-3 px-3 py-2 rounded-[10px] bg-success-bg text-success-ink text-[11.5px] font-medium">{info}</div>
+        )}
+
+        {rotinasHoje.length > 0 && (
+          <>
+            <h2 className="text-[11px] uppercase tracking-[0.6px] text-ink-subtle font-bold mb-3 text-mono">
+              Rotina de hoje
+            </h2>
+            <div className="flex flex-col gap-2 mb-6">
+              {rotinasHoje.map((r) => (
+                <RotinaHojeCard
+                  key={r.id}
+                  rotina={r}
+                  onIniciar={() => onIniciarRotina(r)}
+                  loading={iniciandoId === r.id}
+                />
+              ))}
+            </div>
+          </>
         )}
 
         <h2 className="text-[11px] uppercase tracking-[0.6px] text-ink-subtle font-bold mb-3 text-mono">
@@ -207,10 +245,44 @@ function summarizeDetalhes(treino: Treino): string {
   const d = treino.detalhes;
   switch (d.tipo) {
     case 'musculacao': return `${d.exercicios.length} exercícios`;
-    case 'corrida': return `${d.distanciaKm}km${d.ritmoAlvoMinKm ? ` · ${d.ritmoAlvoMinKm}/km` : ''}`;
-    case 'ciclismo': return `${d.distanciaKm}km`;
-    case 'natacao': return `${d.series.length} séries`;
+    case 'corrida': {
+      const dist = d.distanciaKm ?? (d.blocos?.length ?? 0);
+      return d.distanciaKm
+        ? `${d.distanciaKm}km${d.ritmoAlvoMinKm ? ` · ${d.ritmoAlvoMinKm}/km` : ''}`
+        : `${dist} blocos`;
+    }
+    case 'ciclismo': return d.distanciaKm ? `${d.distanciaKm}km` : `${d.blocos?.length ?? 0} blocos`;
+    case 'natacao': return `${d.blocos?.length ?? d.series?.length ?? 0} blocos`;
     case 'triathlon': return `${d.blocos.length} blocos`;
+    case 'hyrox': return `${d.blocos.length} blocos hyrox`;
     case 'outro': return d.descricao.slice(0, 60);
   }
+}
+
+function RotinaHojeCard({ rotina, onIniciar, loading }: {
+  rotina: Rotina;
+  onIniciar: () => void;
+  loading: boolean;
+}) {
+  return (
+    <div className="rounded-[18px] bg-accent text-accent-ink p-4 shadow-card">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-mono text-[10px] uppercase tracking-[0.7px] font-bold opacity-80">
+          Rotina semanal · {rotina.exercicios.length} exercícios
+        </span>
+        <span className="text-mono text-[10px] uppercase tracking-[0.7px] font-bold px-2 py-0.5 rounded-full bg-bg/20">
+          Hoje
+        </span>
+      </div>
+      <div className="text-[18px] font-bold tracking-tight leading-tight mb-3">{rotina.nome}</div>
+      <button
+        type="button"
+        onClick={onIniciar}
+        disabled={loading}
+        className="w-full h-10 rounded-[12px] bg-accent-ink text-accent font-bold text-[13px] disabled:opacity-50"
+      >
+        {loading ? 'Iniciando…' : 'Iniciar treino →'}
+      </button>
+    </div>
+  );
 }
