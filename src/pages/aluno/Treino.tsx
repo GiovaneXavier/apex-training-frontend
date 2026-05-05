@@ -90,12 +90,17 @@ export default function AlunoTreino() {
   }
 
   // Treino real: musculação → WorkoutLive (execução real com offline-first + RP)
+  // Sem PhoneFrame — fullscreen em qualquer viewport. Frame só no modo demo.
   if (!isDemo && treino && treino.detalhes.tipo === 'musculacao') {
     return (
-      <div className="min-h-screen bg-bg text-ink">
-        <PhoneFrame dark={theme === 'dark'}>
+      <div
+        className="bg-bg text-ink"
+        style={{ height: '100dvh', width: '100%', overflow: 'hidden' }}
+      >
+        {/* Centraliza no desktop limitando a 480px; mobile ocupa 100% */}
+        <div style={{ maxWidth: 480, height: '100%', margin: '0 auto', position: 'relative' }}>
           <WorkoutLive treino={treino} theme={theme} density={density} />
-        </PhoneFrame>
+        </div>
       </div>
     );
   }
