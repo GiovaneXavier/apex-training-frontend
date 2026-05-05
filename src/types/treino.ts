@@ -11,7 +11,9 @@ export type Modalidade =
 
 export type StatusTreino = 'PENDENTE' | 'EM_EXECUCAO' | 'CONCLUIDO' | 'PULADO';
 
-// ── Detalhes JSON (discriminated union) ─────────────────────────
+// ─────────────────────────────────────────────────────────────
+// MUSCULAÇÃO
+// ─────────────────────────────────────────────────────────────
 export type ExercicioPrescrito = {
   series: number;
   reps?: number;
@@ -45,12 +47,58 @@ export type DetalhesMusculacao = {
   observacao?: string;
 };
 
+// ─────────────────────────────────────────────────────────────
+// CORRIDA — taxonomia avançada (9 subtipos) + blocos dinâmicos
+// ─────────────────────────────────────────────────────────────
+export type CorridaSubtipo =
+  | 'BASE'           // Base / Rodagem contínua
+  | 'RECOVERY'       // Recovery Run
+  | 'LONG'           // Longão (Long Run)
+  | 'PROGRESSION'    // Progression Run
+  | 'INTERVALOS'     // Intervalado (Intervals)
+  | 'TEMPO'          // Tempo Run
+  | 'THRESHOLD'      // Limiar
+  | 'FARTLEK'        // Fartlek
+  | 'HILL_REPEATS';  // Hill Repeats
+
+export type CorridaBlocoTipo =
+  | 'aquecimento'
+  | 'tiro'
+  | 'recuperacao'
+  | 'volta_calma'
+  | 'continuo'
+  | 'progressao'
+  | 'subida';
+
+export type CorridaBloco = {
+  tipo: CorridaBlocoTipo;
+  // duração: distância OU tempo (um dos dois)
+  distanciaM?: number;
+  duracaoSeg?: number;
+  // intensidade: ritmo OR FC OR percepção
+  ritmoAlvoMinKm?: string; // "5:30"
+  fcAlvoMin?: number;
+  fcAlvoMax?: number;
+  zonaFC?: 1 | 2 | 3 | 4 | 5;
+  rpeAlvo?: number; // 1-10
+  // repetições do bloco (ex: 8x400m → distancia=400, repeticoes=8)
+  repeticoes?: number;
+  // descanso entre repetições internas (RI)
+  recuperacaoSeg?: number;
+  recuperacaoTipo?: 'trote' | 'caminhada' | 'parado';
+  observacao?: string;
+};
+
 export type DetalhesCorrida = {
   tipo: 'corrida';
-  distanciaKm: number;
+  subtipo?: CorridaSubtipo;
+  // formato simples (compat com legado)
+  distanciaKm?: number;
   ritmoAlvoMinKm?: string;
   fcAlvoMin?: number;
   fcAlvoMax?: number;
+  // formato avançado: blocos sequenciais (aquecimento + tiros + recuperação)
+  blocos?: CorridaBloco[];
   realizado?: {
     distanciaKm?: number;
     duracaoSeg?: number;
@@ -61,28 +109,85 @@ export type DetalhesCorrida = {
   observacao?: string;
 };
 
+// ─────────────────────────────────────────────────────────────
+// CICLISMO — zonas baseadas em FTP (1-7)
+// ─────────────────────────────────────────────────────────────
+export type ZonaFTP = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+export const ZONA_FTP_DESCR: Record<ZonaFTP, { nome: string; pct: string; desc: string }> = {
+  1: { nome: 'Active Recovery', pct: '<55% FTP',     desc: 'Recuperação ativa' },
+  2: { nome: 'Endurance',       pct: '55–75% FTP',   desc: 'Resistência aeróbica' },
+  3: { nome: 'Tempo',           pct: '76–90% FTP',   desc: 'Esforço sustentado' },
+  4: { nome: 'Threshold',       pct: '91–105% FTP',  desc: 'Limiar de lactato' },
+  5: { nome: 'VO2 Max',         pct: '106–120% FTP', desc: 'Potência aeróbica máxima' },
+  6: { nome: 'Anaerobic',       pct: '121–150% FTP', desc: 'Capacidade anaeróbica' },
+  7: { nome: 'Neuromuscular',   pct: '>150% FTP',    desc: 'Sprint / pico' },
+};
+
+export type CiclismoBloco = {
+  tipo: 'aquecimento' | 'intervalo' | 'recuperacao' | 'continuo' | 'volta_calma' | 'sprint';
+  zonaFTP?: ZonaFTP;
+  potenciaAlvoW?: number;
+  potenciaAlvoPctFTP?: number; // alvo bruto em % FTP
+  cadenciaRpm?: number;
+  duracaoSeg?: number;
+  distanciaKm?: number;
+  repeticoes?: number;
+  recuperacaoSeg?: number;
+  observacao?: string;
+};
+
 export type DetalhesCiclismo = {
   tipo: 'ciclismo';
-  distanciaKm: number;
+  ftpW?: number; // FTP do aluno na hora da prescrição
+  // Formato simples (legado)
+  distanciaKm?: number;
   duracaoMin?: number;
   potenciaAlvoW?: number;
+  // Formato avançado
+  blocos?: CiclismoBloco[];
   realizado?: {
     distanciaKm?: number;
     duracaoSeg?: number;
     potenciaMediaW?: number;
+    potenciaNormalizadaW?: number;
     stravaActivityId?: string;
   } | null;
   observacao?: string;
 };
 
+// ─────────────────────────────────────────────────────────────
+// NATAÇÃO — CSS (Critical Swim Speed) + séries por bloco
+// ─────────────────────────────────────────────────────────────
+export type EstiloNado = 'LIVRE' | 'COSTAS' | 'PEITO' | 'BORBOLETA' | 'MEDLEY';
+
+export type NatacaoBloco = {
+  tipo: 'aquecimento' | 'principal' | 'tecnica' | 'volta_calma';
+  repeticoes: number;
+  distanciaM: number;
+  estilo?: EstiloNado;
+  // Pace: pode ser absoluto OU relativo ao CSS
+  paceAlvoSegPor100m?: number;
+  paceCssOffsetSeg?: number; // ex: -2 (CSS-2s = mais rápido), +5
+  // Descanso: RI fixo OU intervalo total (send-off)
+  descansoSeg?: number;
+  sendOffSeg?: number; // tempo total por rep (CSS pace + RI)
+  equipamento?: ('palmar' | 'pull_buoy' | 'pe_de_pato' | 'snorkel' | 'prancha')[];
+  observacao?: string;
+};
+
 export type DetalhesNatacao = {
   tipo: 'natacao';
-  series: {
+  cssBaseSegPor100m?: number; // CSS base do aluno (segundos por 100m)
+  // Formato simples (legado)
+  series?: {
     repeticoes: number;
     distanciaM: number;
-    estilo?: 'LIVRE' | 'COSTAS' | 'PEITO' | 'BORBOLETA' | 'MEDLEY';
+    estilo?: EstiloNado;
     descansoSeg?: number;
   }[];
+  // Formato avançado
+  blocos?: NatacaoBloco[];
   realizado?: {
     distanciaTotalM?: number;
     duracaoSeg?: number;
@@ -93,6 +198,71 @@ export type DetalhesNatacao = {
 export type DetalhesTriathlon = {
   tipo: 'triathlon';
   blocos: (DetalhesNatacao | DetalhesCiclismo | DetalhesCorrida)[];
+  observacao?: string;
+};
+
+// ─────────────────────────────────────────────────────────────
+// HYROX / Híbrido — AMRAP, EMOM, FOR_TIME, estações
+// ─────────────────────────────────────────────────────────────
+export type HyroxFormato =
+  | 'AMRAP'      // As Many Reps As Possible
+  | 'EMOM'       // Every Minute On the Minute
+  | 'FOR_TIME'   // Tempo total para completar
+  | 'TABATA'     // 8 rounds 20s on / 10s off
+  | 'INTERVAL'   // Tempo on / off custom
+  | 'RUN'        // Bloco de corrida ("compromised running")
+  | 'STATION';   // Estação isolada (Sled, Burpee, etc.)
+
+export type HyroxExercicioMov =
+  | 'SKI_ERG'
+  | 'SLED_PUSH'
+  | 'SLED_PULL'
+  | 'BURPEE_BROAD_JUMP'
+  | 'ROWING'
+  | 'FARMERS_CARRY'
+  | 'SANDBAG_LUNGES'
+  | 'WALL_BALLS'
+  | 'RUN'
+  | 'BIKE_ERG'
+  | 'AIR_SQUAT'
+  | 'KETTLEBELL_SWING'
+  | 'BOX_JUMP'
+  | 'OUTRO';
+
+export type HyroxCarga = {
+  // Hyrox classifica cargas em Open / Pro
+  open?: number;   // kg para Open
+  pro?: number;    // kg para Pro
+  unidade?: 'kg' | 'lb';
+};
+
+export type HyroxExercicio = {
+  movimento: HyroxExercicioMov;
+  nome?: string; // override para movimento OUTRO
+  // Meta: distância (sled, run) OU repetições (burpee, wall ball)
+  distanciaM?: number;
+  repeticoes?: number;
+  duracaoSeg?: number;
+  carga?: HyroxCarga;
+  observacao?: string;
+};
+
+export type HyroxBloco = {
+  formato: HyroxFormato;
+  duracaoSeg?: number;          // AMRAP/FOR_TIME/RUN: cap total
+  rounds?: number;              // EMOM/TABATA/INTERVAL: rounds
+  intervaloOnSeg?: number;      // INTERVAL on
+  intervaloOffSeg?: number;     // INTERVAL off / EMOM rest
+  distanciaM?: number;          // RUN: distância de corrida
+  ritmoAlvoMinKm?: string;      // RUN: pace
+  exercicios?: HyroxExercicio[]; // STATION/AMRAP/EMOM/etc
+  descansoEntreSeg?: number;    // descanso pós-bloco
+  observacao?: string;
+};
+
+export type DetalhesHyrox = {
+  tipo: 'hyrox';
+  blocos: HyroxBloco[];
   observacao?: string;
 };
 
@@ -108,6 +278,7 @@ export type TreinoDetalhes =
   | DetalhesCiclismo
   | DetalhesNatacao
   | DetalhesTriathlon
+  | DetalhesHyrox
   | DetalhesOutro;
 
 // ── Entidade ───────────────────────────────────────────────────
@@ -151,4 +322,33 @@ export const STATUS_LABEL: Record<StatusTreino, string> = {
   EM_EXECUCAO: 'Em execução',
   CONCLUIDO: 'Concluído',
   PULADO: 'Pulado',
+};
+
+export const CORRIDA_SUBTIPO_LABEL: Record<CorridaSubtipo, string> = {
+  BASE: 'Base / Rodagem',
+  RECOVERY: 'Recovery Run',
+  LONG: 'Longão',
+  PROGRESSION: 'Progression',
+  INTERVALOS: 'Intervalado',
+  TEMPO: 'Tempo Run',
+  THRESHOLD: 'Threshold',
+  FARTLEK: 'Fartlek',
+  HILL_REPEATS: 'Hill Repeats',
+};
+
+export const HYROX_MOV_LABEL: Record<HyroxExercicioMov, string> = {
+  SKI_ERG: 'SkiErg',
+  SLED_PUSH: 'Sled Push',
+  SLED_PULL: 'Sled Pull',
+  BURPEE_BROAD_JUMP: 'Burpee Broad Jump',
+  ROWING: 'Rowing',
+  FARMERS_CARRY: "Farmer's Carry",
+  SANDBAG_LUNGES: 'Sandbag Lunges',
+  WALL_BALLS: 'Wall Balls',
+  RUN: 'Run',
+  BIKE_ERG: 'BikeErg',
+  AIR_SQUAT: 'Air Squat',
+  KETTLEBELL_SWING: 'Kettlebell Swing',
+  BOX_JUMP: 'Box Jump',
+  OUTRO: 'Outro',
 };

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { AlunoTabs } from '@/components/AlunoTabs';
+import { TreinoCard } from '@/components/TreinoCard';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiErrorMessage } from '@/lib/api';
 import { listProvas } from '@/lib/api/provas';
@@ -137,7 +138,14 @@ export default function AlunoCalendario() {
 
         <Legend />
 
-        {diaSel && <DiaDetails key={diaSel} diaKey={diaSel} itens={itensDia(diaSel)} />}
+        {diaSel && (
+          <DiaDetails
+            key={diaSel}
+            diaKey={diaSel}
+            treinos={treinosByDay.get(diaSel) ?? []}
+            provas={provasByDay.get(diaSel) ?? []}
+          />
+        )}
       </div>
 
       <AlunoTabs />
@@ -154,36 +162,34 @@ function Legend() {
   );
 }
 
-function DiaDetails({ diaKey, itens }: { diaKey: string; itens: ReturnType<typeof identityArr> }) {
+function DiaDetails({ diaKey, treinos, provas }: { diaKey: string; treinos: Treino[]; provas: Prova[] }) {
   const date = new Date(diaKey + 'T00:00:00');
+  const total = treinos.length + provas.length;
   return (
-    <div className="rounded-[14px] bg-surface border border-app overflow-hidden">
-      <div className="px-4 py-2.5 bg-surface-muted">
+    <div className="mt-2">
+      <div className="px-1 py-2 mb-2">
         <div className="text-mono text-[10px] uppercase tracking-[0.6px] text-ink-subtle font-bold">
           {date.getDate().toString().padStart(2, '0')} · {MONTHS[date.getMonth()]}
         </div>
       </div>
-      {itens.length === 0 ? (
-        <div className="px-4 py-4 text-ink-subtle text-[13px]">Nenhuma agenda neste dia.</div>
+      {total === 0 ? (
+        <div className="px-4 py-4 text-ink-subtle text-[13px] bg-surface rounded-[14px] border border-app">
+          Nenhuma agenda neste dia.
+        </div>
       ) : (
-        itens.map((it) => (
-          <div key={it.kind + it.id} className="flex items-center justify-between px-4 py-3 border-t border-app first:border-t-0">
-            <div className="min-w-0">
-              <div className="text-mono text-[10px] uppercase tracking-[0.6px] text-ink-subtle font-bold mb-0.5">
-                {it.kind === 'treino' ? 'Treino' : 'Prova'} · {it.modalidade}
+        <div className="flex flex-col gap-2">
+          {treinos.map((t) => (
+            <TreinoCard key={t.id} treino={t} href={`/aluno/treino/${t.id}`} />
+          ))}
+          {provas.map((p) => (
+            <div key={p.id} className="bg-surface rounded-[14px] p-4 border border-app">
+              <div className="text-mono text-[10px] uppercase tracking-[0.6px] text-pr font-bold mb-0.5">
+                Prova · {MODALIDADE_LABEL[p.modalidade]}
               </div>
-              <div className="text-[13.5px] font-semibold truncate">{it.titulo}</div>
+              <div className="text-[14px] font-semibold">{p.nome}</div>
             </div>
-            {it.kind === 'treino' && (
-              <Link
-                to={`/aluno/treino/${it.id}`}
-                className="text-[10px] uppercase tracking-wider font-bold text-accent flex-shrink-0 ml-2"
-              >
-                Abrir →
-              </Link>
-            )}
-          </div>
-        ))
+          ))}
+        </div>
       )}
     </div>
   );
@@ -219,7 +225,3 @@ function groupBy<T>(arr: T[], keyFn: (t: T) => string) {
   return m;
 }
 
-// Alias usado só pra inferir o tipo de itensDia no DiaDetails
-function identityArr(): { kind: 'treino' | 'prova'; id: string; titulo: string; modalidade: string; status?: string }[] {
-  return [];
-}
