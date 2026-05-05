@@ -135,6 +135,7 @@ export function WorkoutLive({ treino, theme, density = 'regular' }: Props) {
           exerciseIndex={exec.state.currentExercicio + 1}
           exerciseTotal={exec.state.exercicios.length}
           exerciseName={exAtual.nome}
+          videoUrl={exAtualPrescrito?.videoUrl ?? null}
           videoDuration="—:—"
           series={`${exAtual.series} × ${exAtual.reps ?? '—'}`}
           cargaAlvo={exAtualPrescrito?.prescrito.cargaKg ? `${exAtualPrescrito.prescrito.cargaKg}kg` : exAtualPrescrito?.prescrito.cargaPctRP ? `${exAtualPrescrito.prescrito.cargaPctRP}%` : '—'}

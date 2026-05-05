@@ -17,6 +17,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { apiErrorMessage } from '@/lib/api';
 import { listEvolucoes, type Evolucao } from '@/lib/api/evolucoes';
+import { getDesempenho, type Desempenho, type EstimativaProva } from '@/lib/api/desempenho';
 import { cn } from '@/lib/utils';
 
 // ─────────────────────────────────────────────────────────────
@@ -25,45 +26,27 @@ import { cn } from '@/lib/utils';
 const CORAL = '#fc4c02';
 const CORAL_DARK = '#0a0a0b';
 
-// ─────────────────────────────────────────────────────────────
-// Mocks de desempenho atlético
-// (futuramente vem de /api/professor/calendario + RPs + Strava)
-// ─────────────────────────────────────────────────────────────
-type DesempenhoMock = {
-  streakSemanas: number;
-  ciclo: { metaKm: number; feitoKm: number; metaTitulo: string };
-  acumulado: { distanciaKm: number; tempoMin: number; treinos: number };
-  estimativas: { prova: '5K' | '10K' | '15K' | '21K'; tempo: string; pace: string }[];
-  resumoMes: {
-    tempo: { valor: string; sub: string };
-    distancia: { valor: string; sub: string };
-    treinos: { valor: string; sub: string };
-    carga: { valor: string; sub: string };
-  };
-};
-
-const DESEMPENHO_MOCK: DesempenhoMock = {
-  streakSemanas: 10,
-  ciclo: { metaKm: 21, feitoKm: 15.4, metaTitulo: '21 km' },
-  acumulado: { distanciaKm: 142, tempoMin: 745, treinos: 28 },
-  estimativas: [
-    { prova: '5K',  tempo: '24:35', pace: '4:55 /km' },
-    { prova: '10K', tempo: '52:10', pace: '5:13 /km' },
-    { prova: '15K', tempo: '1:21:40', pace: '5:26 /km' },
-    { prova: '21K', tempo: '1:58:00', pace: '5:35 /km' },
-  ],
-  resumoMes: {
-    tempo: { valor: '12h 25min', sub: 'tempo correndo' },
-    distancia: { valor: '142 km', sub: 'distância' },
-    treinos: { valor: '28', sub: 'treinos' },
-    carga: { valor: '6.842', sub: 'carga (kg)' },
-  },
-};
 
 // ─────────────────────────────────────────────────────────────
 // Tela principal
 // ─────────────────────────────────────────────────────────────
 export default function AlunoProgresso() {
+  const { user } = useAuth();
+  const [desempenho, setDesempenho] = useState<Desempenho | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    setLoading(true);
+    getDesempenho()
+      .then((d) => !cancelled && setDesempenho(d))
+      .catch((err) => !cancelled && setError(apiErrorMessage(err)))
+      .finally(() => !cancelled && setLoading(false));
+    return () => { cancelled = true; };
+  }, [user]);
+
   return (
     <div className="min-h-screen bg-bg text-ink pb-24">
       <header className="px-5 pt-7 pb-4 flex items-center justify-between">
@@ -83,7 +66,7 @@ export default function AlunoProgresso() {
           </TabsList>
 
           <TabsContent value="desempenho">
-            <SecaoDesempenho data={DESEMPENHO_MOCK} />
+            <SecaoDesempenho data={desempenho} loading={loading} error={error} />
           </TabsContent>
 
           <TabsContent value="evolucao">
@@ -98,21 +81,42 @@ export default function AlunoProgresso() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// SECÇÃO 1 — Desempenho atlético
+// SECÇÃO 1 — Desempenho atlético (consome /api/aluno/desempenho)
 // ─────────────────────────────────────────────────────────────
-function SecaoDesempenho({ data }: { data: DesempenhoMock }) {
-  const ciclopct = Math.min(100, Math.round((data.ciclo.feitoKm / data.ciclo.metaKm) * 100));
+function SecaoDesempenho({
+  data, loading, error,
+}: {
+  data: Desempenho | null;
+  loading: boolean;
+  error: string | null;
+}) {
+  if (loading) {
+    return (
+      <Card className="mt-2">
+        <CardContent className="p-6 text-center text-ink-muted text-[13px]">
+          Carregando desempenho…
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="mt-2">
+        <CardContent className="p-6 text-center">
+          <div className="text-danger text-[13px] font-medium">{error}</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!data) return null;
 
   return (
     <div className="flex flex-col gap-3">
-      <CardStreak semanas={data.streakSemanas} />
-      <CardCiclo
-        metaTitulo={data.ciclo.metaTitulo}
-        pct={ciclopct}
-        feitoKm={data.ciclo.feitoKm}
-        acumulado={data.acumulado}
-      />
-      <CardEstimativas estimativas={data.estimativas} />
+      <CardStreak semanas={data.streak} />
+      <CardCiclo ciclo={data.ciclo} />
+      <CardEstimativas estimativas={data.estimativasProva} />
       <CardResumoMes resumo={data.resumoMes} />
     </div>
   );
@@ -153,24 +157,19 @@ function CardStreak({ semanas }: { semanas: number }) {
   );
 }
 
-function CardCiclo({
-  metaTitulo, pct, feitoKm, acumulado,
-}: {
-  metaTitulo: string;
-  pct: number;
-  feitoKm: number;
-  acumulado: { distanciaKm: number; tempoMin: number; treinos: number };
-}) {
+function CardCiclo({ ciclo }: { ciclo: Desempenho['ciclo'] }) {
   const dadosDonut = [
-    { name: 'feito', value: pct },
-    { name: 'falta', value: 100 - pct },
+    { name: 'feito', value: ciclo.pct },
+    { name: 'falta', value: Math.max(0, 100 - ciclo.pct) },
   ];
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Ciclo atual</CardTitle>
-        <CardDescription>Meta {metaTitulo} · {feitoKm.toFixed(1)} km feitos</CardDescription>
+        <CardDescription>
+          {ciclo.metaTitulo} · {ciclo.concluidos} de {ciclo.total} {ciclo.total === 1 ? 'treino concluído' : 'treinos concluídos'}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-[140px_1fr] items-center gap-4">
@@ -183,7 +182,7 @@ function CardCiclo({
                   cx="50%" cy="50%"
                   innerRadius={48} outerRadius={66}
                   startAngle={90} endAngle={-270}
-                  paddingAngle={2}
+                  paddingAngle={ciclo.pct === 0 || ciclo.pct === 100 ? 0 : 2}
                   dataKey="value"
                   stroke="none"
                 >
@@ -194,7 +193,7 @@ function CardCiclo({
             </ResponsiveContainer>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
               <span className="text-mono tabular text-[26px] font-bold leading-none" style={{ color: CORAL }}>
-                {pct}%
+                {ciclo.pct}%
               </span>
               <span className="text-[9.5px] uppercase tracking-wider font-bold text-ink-subtle mt-0.5">
                 do ciclo
@@ -202,11 +201,11 @@ function CardCiclo({
             </div>
           </div>
 
-          {/* Lista lateral */}
+          {/* Lista lateral — métricas do mês corrente */}
           <ul className="space-y-2.5">
-            <ItemMetrica label="Distância acumulada" valor={`${acumulado.distanciaKm} km`} />
-            <ItemMetrica label="Tempo correndo" valor={fmtMin(acumulado.tempoMin)} />
-            <ItemMetrica label="Total de treinos" valor={String(acumulado.treinos)} />
+            <ItemMetrica label="Distância acumulada" valor={`${ciclo.distanciaKm} km`} />
+            <ItemMetrica label="Treinos concluídos" valor={String(ciclo.concluidos)} />
+            <ItemMetrica label="Pendentes" valor={String(Math.max(0, ciclo.total - ciclo.concluidos))} />
           </ul>
         </div>
       </CardContent>
@@ -225,12 +224,35 @@ function ItemMetrica({ label, valor }: { label: string; valor: string }) {
 
 function CardEstimativas({
   estimativas,
-}: { estimativas: DesempenhoMock['estimativas'] }) {
+}: { estimativas: EstimativaProva[] | null }) {
+  // Empty state: aluno sem RPs de corrida
+  if (!estimativas) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Estimativas de prova</CardTitle>
+          <CardDescription>Registre seu primeiro RP de corrida (5K, 10K…) para vermos a previsão</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-2xl bg-surface-muted p-6 text-center">
+            <div className="text-[12px] text-ink-muted mb-2">Nenhum RP de corrida ainda.</div>
+            <Link
+              to="/aluno/rps"
+              className="inline-flex items-center justify-center h-10 px-4 rounded-2xl bg-accent text-accent-ink font-bold text-[12px]"
+            >
+              + Registrar RP
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Estimativas de prova</CardTitle>
-        <CardDescription>Previsão baseada no seu ritmo dos últimos 30 dias</CardDescription>
+        <CardDescription>Previsão baseada nos seus RPs registrados</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-2">
@@ -240,9 +262,11 @@ function CardEstimativas({
                 {e.prova}
               </div>
               <div className="text-mono tabular text-[22px] font-bold text-ink leading-none">
-                {e.tempo}
+                {e.tempo ?? '—'}
               </div>
-              <div className="text-[11px] text-ink-muted mt-1.5">{e.pace}</div>
+              <div className="text-[11px] text-ink-muted mt-1.5">
+                {e.pace ?? 'sem RP'}
+              </div>
             </div>
           ))}
         </div>
@@ -251,7 +275,10 @@ function CardEstimativas({
   );
 }
 
-function CardResumoMes({ resumo }: { resumo: DesempenhoMock['resumoMes'] }) {
+function CardResumoMes({ resumo }: { resumo: Desempenho['resumoMes'] }) {
+  const cargaFmt = resumo.cargaTotalKg >= 1000
+    ? `${(resumo.cargaTotalKg / 1000).toFixed(1)}t`
+    : `${resumo.cargaTotalKg}kg`;
   return (
     <Card>
       <CardHeader>
@@ -259,21 +286,21 @@ function CardResumoMes({ resumo }: { resumo: DesempenhoMock['resumoMes'] }) {
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-2">
-          {/* Card destaque coral */}
+          {/* Card destaque coral — tempo total */}
           <div
             className="rounded-2xl p-4 text-white"
             style={{ background: CORAL }}
           >
             <div className="text-[10px] uppercase tracking-[0.6px] font-bold opacity-80 mb-1.5">
-              {resumo.tempo.sub}
+              tempo total
             </div>
             <div className="text-mono tabular text-[22px] font-bold leading-none">
-              {resumo.tempo.valor}
+              {resumo.tempoFmt}
             </div>
           </div>
-          <ResumoCardSimples titulo={resumo.distancia.sub} valor={resumo.distancia.valor} />
-          <ResumoCardSimples titulo={resumo.treinos.sub} valor={resumo.treinos.valor} />
-          <ResumoCardSimples titulo={resumo.carga.sub} valor={resumo.carga.valor} />
+          <ResumoCardSimples titulo="distância" valor={`${resumo.distanciaKm} km`} />
+          <ResumoCardSimples titulo="treinos" valor={String(resumo.treinos)} />
+          <ResumoCardSimples titulo="carga total" valor={cargaFmt} />
         </div>
       </CardContent>
     </Card>
@@ -523,13 +550,6 @@ function TimelineItem({ avaliacao }: { avaliacao: Evolucao }) {
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
-function fmtMin(min: number): string {
-  const h = Math.floor(min / 60);
-  const m = Math.round(min % 60);
-  if (h === 0) return `${m}min`;
-  return `${h}h ${m.toString().padStart(2, '0')}min`;
-}
-
 function fmtDataCurta(iso: string): string {
   const d = new Date(iso);
   return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;

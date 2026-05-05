@@ -1,5 +1,6 @@
 import { DENSITY } from '@/themes/tokens';
-import { IconClock, IconPlay } from './icons';
+import { IconClock } from './icons';
+import { VideoPlayer } from './VideoPlayer';
 import type { WithTheme, WithDensity } from './types';
 
 type Props = WithTheme & WithDensity & {
@@ -7,6 +8,8 @@ type Props = WithTheme & WithDensity & {
   exerciseIndex?: number;
   exerciseTotal?: number;
   exerciseName?: string;
+  /** URL do vídeo (YouTube, Vimeo ou arquivo nativo). Usa placeholder quando ausente. */
+  videoUrl?: string | null;
   videoDuration?: string;
   series?: string;
   cargaAlvo?: string;
@@ -21,6 +24,7 @@ export function ExerciseCard({
   exerciseIndex = 2,
   exerciseTotal = 6,
   exerciseName = 'Supino Inclinado\ncom Halteres',
+  videoUrl,
   videoDuration = '0:42',
   series = '3 × 12',
   cargaAlvo = '32kg',
@@ -39,48 +43,19 @@ export function ExerciseCard({
         overflow: 'hidden',
       }}
     >
-      <div
-        style={{
-          position: 'relative',
-          aspectRatio: '16 / 10',
-          background: `repeating-linear-gradient(135deg, ${t.videoBg}, ${t.videoBg} 12px, ${t.videoStripe} 12px, ${t.videoStripe} 24px)`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <div
-          style={{
-            width: 56,
-            height: 56,
-            borderRadius: 999,
-            background: 'rgba(0,0,0,0.55)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingLeft: 4,
-          }}
-        >
-          <IconPlay color="#fff" size={22} />
-        </div>
-        <div
-          style={{
-            position: 'absolute',
-            top: 10,
-            left: 10,
-            fontFamily: t.monoFont,
-            fontSize: 9.5,
-            color: 'rgba(255,255,255,0.85)',
-            letterSpacing: 0.5,
-            padding: '3px 7px',
-            borderRadius: 4,
-            background: 'rgba(0,0,0,0.55)',
-            textTransform: 'uppercase',
-          }}
-        >
-          vídeo · {videoDuration}
-        </div>
+      {/* Vídeo: iframe responsivo (YouTube/Vimeo) ou <video> nativo (mp4/webm).
+         O componente preserva o aspect-ratio 16/10 do design e os cantos
+         arredondados em qualquer viewport mobile. */}
+      <div style={{ position: 'relative' }}>
+        <VideoPlayer
+          url={videoUrl}
+          badge={videoUrl ? `vídeo · ${videoDuration}` : undefined}
+          placeholderStripeBg={t.videoBg}
+          placeholderStripeFg={t.videoStripe}
+          rounded={0}            // bordas só no card; player encaixa flush
+          aspectRatio="16 / 10"
+        />
+        {/* Pílula de descanso preservada por cima do player */}
         <div
           style={{
             position: 'absolute',
@@ -95,6 +70,7 @@ export function ExerciseCard({
             color: '#fff',
             fontSize: 11,
             fontWeight: 600,
+            pointerEvents: 'none',
           }}
         >
           <IconClock color="#fff" />
