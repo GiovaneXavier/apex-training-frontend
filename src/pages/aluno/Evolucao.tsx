@@ -1,11 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { AlunoTabs } from '@/components/AlunoTabs';
+import { useAuth } from '@/contexts/AuthContext';
+import { apiErrorMessage } from '@/lib/api';
+import { listEvolucoes, type Evolucao } from '@/lib/api/evolucoes';
 import { cn } from '@/lib/utils';
 
 // ─────────────────────────────────────────────────────────────
-// Tipos (espelhados do backend)
+// Tipo local (compatível com Evolucao do backend + mocks)
 // ─────────────────────────────────────────────────────────────
 type AvaliadorTipo = 'ALUNO' | 'NUTRICIONISTA' | 'PROFESSOR';
 
@@ -22,6 +25,22 @@ type Avaliacao = {
   fotos?: { frente?: string; lado?: string; costas?: string };
   observacoes?: string;
 };
+
+function fromBackend(e: Evolucao): Avaliacao {
+  return {
+    id: e.id,
+    dataAvaliacao: e.dataAvaliacao,
+    avaliadorTipo: e.avaliadorTipo,
+    pesoKg: e.pesoKg ?? undefined,
+    alturaCm: e.alturaCm ?? undefined,
+    imc: e.imc ?? undefined,
+    percentualGordura: e.percentualGordura ?? undefined,
+    protocolo: e.protocolo ?? undefined,
+    medidas: (e.medidas as any) ?? undefined,
+    fotos: (e.fotos as any) ?? undefined,
+    observacoes: e.observacoes ?? undefined,
+  };
+}
 
 // ─────────────────────────────────────────────────────────────
 // Mock — simula 6 avaliações nos últimos 90 dias
@@ -123,22 +142,53 @@ const METRICAS: { key: MetricaKey; label: string; unidade: string; melhorMenor: 
 ];
 
 export default function AlunoEvolucao() {
+  const { user } = useAuth();
   const [periodo, setPeriodo] = useState<Periodo>(90);
   const [metricaSel, setMetricaSel] = useState<MetricaKey>('pesoKg');
   const [fotoIdx, setFotoIdx] = useState(0);
+  const [todas, setTodas] = useState<Avaliacao[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [usandoMock, setUsandoMock] = useState(false);
+
+  // Carrega dados reais do backend; se vazio, usa mocks pra UX.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    setLoading(true);
+    listEvolucoes({ alunoId: user.aluno?.id, limit: 200 })
+      .then((items) => {
+        if (cancelled) return;
+        if (items.length === 0) {
+          setTodas(MOCK);
+          setUsandoMock(true);
+        } else {
+          setTodas(items.map(fromBackend));
+          setUsandoMock(false);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(apiErrorMessage(err));
+        setTodas(MOCK);
+        setUsandoMock(true);
+      })
+      .finally(() => !cancelled && setLoading(false));
+    return () => { cancelled = true; };
+  }, [user]);
 
   const avaliacoes = useMemo(() => {
     const limite = HOJE.getTime() - periodo * 86400000;
-    return MOCK
+    return todas
       .filter((a) => new Date(a.dataAvaliacao).getTime() >= limite)
       .sort((a, b) => new Date(a.dataAvaliacao).getTime() - new Date(b.dataAvaliacao).getTime());
-  }, [periodo]);
+  }, [periodo, todas]);
 
   const fotosOrdenadas = useMemo(
-    () => MOCK.filter((a) => a.fotos?.frente).sort(
+    () => todas.filter((a) => a.fotos?.frente).sort(
       (a, b) => new Date(b.dataAvaliacao).getTime() - new Date(a.dataAvaliacao).getTime(),
     ),
-    [],
+    [todas],
   );
 
   return (
@@ -157,9 +207,18 @@ export default function AlunoEvolucao() {
 
       <div className="px-5 max-w-2xl mx-auto">
         <h1 className="text-[26px] font-bold tracking-tight mb-1">Evolução corporal</h1>
-        <p className="text-ink-muted text-sm mb-5">
+        <p className="text-ink-muted text-sm mb-3">
           {avaliacoes.length} {avaliacoes.length === 1 ? 'avaliação' : 'avaliações'} nos últimos {periodo} dias
         </p>
+
+        {error && (
+          <div className="px-3 py-2 mb-3 rounded-[10px] bg-danger-bg text-danger text-[12px] font-medium">{error}</div>
+        )}
+        {usandoMock && !loading && (
+          <div className="px-3 py-2 mb-3 rounded-[10px] bg-warn-bg text-warn text-[11px] font-medium">
+            Mostrando dados de exemplo. Adicione sua primeira avaliação para ver dados reais.
+          </div>
+        )}
 
         {/* Filtro período */}
         <div className="grid grid-cols-4 gap-1.5 mb-5">

@@ -13,6 +13,7 @@ import AlunoCalendario from './pages/aluno/Calendario';
 import AlunoRPs from './pages/aluno/RPs';
 import AlunoPerfil from './pages/aluno/Perfil';
 import AlunoEvolucao from './pages/aluno/Evolucao';
+import AlunoEvolucaoNova from './pages/aluno/EvolucaoNova';
 
 import ProfDashboard from './pages/professor/Dashboard';
 import ProfAlunos from './pages/professor/Alunos';
@@ -56,6 +57,10 @@ export default function App() {
       <Route
         path="/aluno/evolucao"
         element={<ProtectedRoute roles={['ALUNO']}><AlunoEvolucao /></ProtectedRoute>}
+      />
+      <Route
+        path="/aluno/evolucao/nova"
+        element={<ProtectedRoute roles={['ALUNO', 'NUTRICIONISTA', 'PROFESSOR']}><AlunoEvolucaoNova /></ProtectedRoute>}
       />
 
       <Route
