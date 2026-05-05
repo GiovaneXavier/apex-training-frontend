@@ -14,6 +14,7 @@ import AlunoRPs from './pages/aluno/RPs';
 import AlunoPerfil from './pages/aluno/Perfil';
 import AlunoEvolucao from './pages/aluno/Evolucao';
 import AlunoEvolucaoNova from './pages/aluno/EvolucaoNova';
+import AlunoProgresso from './pages/aluno/Progresso';
 
 import ProfDashboard from './pages/professor/Dashboard';
 import ProfAlunos from './pages/professor/Alunos';
@@ -61,6 +62,10 @@ export default function App() {
       <Route
         path="/aluno/evolucao/nova"
         element={<ProtectedRoute roles={['ALUNO', 'NUTRICIONISTA', 'PROFESSOR']}><AlunoEvolucaoNova /></ProtectedRoute>}
+      />
+      <Route
+        path="/aluno/progresso"
+        element={<ProtectedRoute roles={['ALUNO']}><AlunoProgresso /></ProtectedRoute>}
       />
 
       <Route
