@@ -7,8 +7,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { apiErrorMessage } from '@/lib/api';
 import { listProvas } from '@/lib/api/provas';
 import { listTreinos } from '@/lib/api/treinos';
+import { iniciarTreinoDeRotina, listRotinas, type DiaSemana, type Rotina } from '@/lib/api/rotinas';
 import { cn } from '@/lib/utils';
 import { MODALIDADE_LABEL, type Prova, type Treino } from '@/types/treino';
+import { useNavigate } from 'react-router-dom';
+
+const DIA_SEMANA_INDEX: Record<DiaSemana, number> = {
+  DOM: 0, SEG: 1, TER: 2, QUA: 3, QUI: 4, SEX: 5, SAB: 6,
+};
 
 const DAYS_SHORT = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -23,8 +29,10 @@ export default function AlunoCalendario() {
   });
   const [treinos, setTreinos] = useState<Treino[]>([]);
   const [provas, setProvas] = useState<Prova[]>([]);
+  const [rotinas, setRotinas] = useState<Rotina[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [diaSel, setDiaSel] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!user?.aluno?.id) return;
@@ -37,16 +45,56 @@ export default function AlunoCalendario() {
     Promise.all([
       listTreinos(user.aluno.id, { desde: desde.toISOString(), ate: ate.toISOString(), limit: 200 }),
       listProvas(user.aluno.id, { desde: desde.toISOString(), ate: ate.toISOString(), limit: 50 }),
+      listRotinas({ alunoId: user.aluno.id }).catch(() => []),
     ])
-      .then(([t, p]) => {
+      .then(([t, p, r]) => {
         if (cancelled) return;
         setTreinos(t);
         setProvas(p);
+        setRotinas(r);
       })
       .catch((err) => !cancelled && setError(apiErrorMessage(err)));
 
     return () => { cancelled = true; };
   }, [user?.aluno?.id, cursor]);
+
+  // Projeção: para cada dia do mês, achar rotinas vigentes nesse dia
+  // que ainda não tenham instância Treino no mesmo dia.
+  const rotinasProjetadasByDay = useMemo(() => {
+    const map = new Map<string, Rotina[]>();
+    if (rotinas.length === 0) return map;
+
+    const start = new Date(cursor); start.setDate(1); start.setHours(0, 0, 0, 0);
+    const end = new Date(start); end.setMonth(end.getMonth() + 1);
+    // Itera dia a dia do mês corrente
+    for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
+      const key = new Date(d).toISOString().slice(0, 10);
+      const dow = d.getDay();
+      const aplicaveis = rotinas.filter((r) => {
+        if (DIA_SEMANA_INDEX[r.diaSemana] !== dow) return false;
+        const ini = new Date(r.vigenciaInicio); ini.setHours(0, 0, 0, 0);
+        if (d < ini) return false;
+        if (r.vigenciaFim) {
+          const fim = new Date(r.vigenciaFim); fim.setHours(23, 59, 59, 999);
+          if (d > fim) return false;
+        }
+        return true;
+      });
+      if (aplicaveis.length > 0) map.set(key, aplicaveis);
+    }
+    return map;
+  }, [rotinas, cursor]);
+
+  async function onIniciarRotina(rotinaId: string, dataKey: string) {
+    setError(null);
+    try {
+      const dataAlvo = new Date(dataKey + 'T07:00:00').toISOString();
+      const treino = await iniciarTreinoDeRotina(rotinaId, dataAlvo);
+      navigate(`/aluno/treino/${treino.id}`);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    }
+  }
 
   const days = useMemo(() => buildMonthGrid(cursor), [cursor]);
 
@@ -113,6 +161,8 @@ export default function AlunoCalendario() {
             const itens = itensDia(key);
             const hasTreino = itens.some((i) => i.kind === 'treino');
             const hasProva = itens.some((i) => i.kind === 'prova');
+            // Rotina projetada só conta se ainda não há treino instanciado nesse dia
+            const hasRotina = !hasTreino && (rotinasProjetadasByDay.get(key)?.length ?? 0) > 0;
             const isSel = diaSel === key;
 
             return (
@@ -129,6 +179,7 @@ export default function AlunoCalendario() {
                 <span className="text-mono tabular">{d.date.getDate()}</span>
                 <div className="flex gap-0.5 h-1">
                   {hasTreino && <span className={cn('size-1 rounded-full', isSel || isToday ? 'bg-current' : 'bg-accent')} />}
+                  {hasRotina && <span className={cn('size-1 rounded-full opacity-60', isSel || isToday ? 'bg-current' : 'bg-accent')} />}
                   {hasProva && <span className={cn('size-1 rounded-full', isSel || isToday ? 'bg-current' : 'bg-pr')} />}
                 </div>
               </button>
@@ -144,6 +195,8 @@ export default function AlunoCalendario() {
             diaKey={diaSel}
             treinos={treinosByDay.get(diaSel) ?? []}
             provas={provasByDay.get(diaSel) ?? []}
+            rotinas={(treinosByDay.get(diaSel)?.length ?? 0) > 0 ? [] : rotinasProjetadasByDay.get(diaSel) ?? []}
+            onIniciarRotina={(rotinaId) => onIniciarRotina(rotinaId, diaSel)}
           />
         )}
       </div>
@@ -162,9 +215,16 @@ function Legend() {
   );
 }
 
-function DiaDetails({ diaKey, treinos, provas }: { diaKey: string; treinos: Treino[]; provas: Prova[] }) {
+function DiaDetails({ diaKey, treinos, provas, rotinas, onIniciarRotina }: {
+  diaKey: string;
+  treinos: Treino[];
+  provas: Prova[];
+  rotinas: Rotina[];
+  onIniciarRotina: (rotinaId: string) => void;
+}) {
   const date = new Date(diaKey + 'T00:00:00');
-  const total = treinos.length + provas.length;
+  const isPast = date < new Date(new Date().setHours(0, 0, 0, 0));
+  const total = treinos.length + provas.length + rotinas.length;
   return (
     <div className="mt-2">
       <div className="px-1 py-2 mb-2">
@@ -180,6 +240,28 @@ function DiaDetails({ diaKey, treinos, provas }: { diaKey: string; treinos: Trei
         <div className="flex flex-col gap-2">
           {treinos.map((t) => (
             <TreinoCard key={t.id} treino={t} href={`/aluno/treino/${t.id}`} />
+          ))}
+          {rotinas.map((r) => (
+            <div key={r.id} className="bg-surface rounded-[14px] p-4 border border-dashed border-app-strong">
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-mono text-[10px] uppercase tracking-[0.6px] text-accent font-bold">
+                  Rotina semanal · {r.exercicios.length} exer.
+                </div>
+                <span className="text-mono text-[10px] uppercase tracking-wider text-ink-subtle font-bold">
+                  Projetada
+                </span>
+              </div>
+              <div className="text-[14px] font-semibold mb-2">{r.nome}</div>
+              {!isPast && (
+                <button
+                  type="button"
+                  onClick={() => onIniciarRotina(r.id)}
+                  className="text-[11px] uppercase tracking-wider font-bold text-accent"
+                >
+                  Iniciar treino →
+                </button>
+              )}
+            </div>
           ))}
           {provas.map((p) => (
             <div key={p.id} className="bg-surface rounded-[14px] p-4 border border-app">
