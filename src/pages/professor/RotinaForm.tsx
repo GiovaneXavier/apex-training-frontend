@@ -7,7 +7,6 @@ import { GRUPO_MUSCULAR_LABEL, listExercicios, type Exercicio, type GrupoMuscula
 import { listAlunos, type AlunoVinculado } from '@/lib/api/professor';
 import {
   DIAS,
-  DIA_SEMANA_LABEL,
   createRotina,
   getRotina,
   updateRotina,
