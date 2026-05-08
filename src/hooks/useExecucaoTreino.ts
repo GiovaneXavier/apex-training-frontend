@@ -100,6 +100,7 @@ export type UseExecucaoTreino = {
   salvarSerie: (kg: number, reps: number, opts?: { rpe?: number; observacao?: string }) => void;
   pularSerie: () => void;
   proximoExercicio: () => void;
+  setExercicio: (idx: number) => void;
   finalizar: () => Promise<NovoRecorde[]>;
   dismissCelebracao: () => void;
   reset: () => void;
@@ -182,6 +183,18 @@ export function useExecucaoTreino(treino: Treino): UseExecucaoTreino {
     });
   }, [persist]);
 
+  // Navegação livre entre exercícios — usado pelo drawer "Visão geral"
+  // e pelos botões Prev/Next. Posiciona currentSet na primeira série
+  // ainda não realizada do exercício destino (ou no fim, se já completo).
+  const setExercicio = useCallback((idx: number) => {
+    persist((s) => {
+      if (idx < 0 || idx >= s.exercicios.length || idx === s.currentExercicio) return s;
+      const ex = s.exercicios[idx];
+      const nextSet = Math.min(ex.realizado.length, ex.series);
+      return { ...s, currentExercicio: idx, currentSet: nextSet };
+    });
+  }, [persist]);
+
   const finalizar = useCallback<UseExecucaoTreino['finalizar']>(async () => {
     const snapshot = stateRef.current;
 
@@ -245,6 +258,7 @@ export function useExecucaoTreino(treino: Treino): UseExecucaoTreino {
     salvarSerie,
     pularSerie,
     proximoExercicio,
+    setExercicio,
     finalizar,
     dismissCelebracao,
     reset,
