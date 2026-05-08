@@ -62,7 +62,7 @@ export function WeeklyTimeline({
   return (
     <div
       ref={containerRef}
-      className="flex gap-1.5 overflow-x-auto -mx-5 px-5 py-2 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex gap-1.5 overflow-x-auto -mx-5 px-5 py-2 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto"
       role="tablist"
       aria-label="Selecionar dia da semana"
     >
@@ -93,13 +93,13 @@ export function WeeklyTimeline({
           >
             <span
               className={cn(
-                'text-[10px] uppercase tracking-[0.6px] font-bold text-mono',
+                'text-center text-[10px] uppercase tracking-[0.6px] font-bold text-mono',
                 isSelected ? 'opacity-90' : 'text-ink-subtle',
               )}
             >
               {DIAS_CURTO[d.getDay()]}
             </span>
-            <span className="text-[18px] font-bold tabular leading-none">
+            <span className="text-center text-[18px] font-bold tabular leading-none">
               {d.getDate()}
             </span>
 
