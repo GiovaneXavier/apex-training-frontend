@@ -4,6 +4,9 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { WorkoutScreen } from '@/components/workout/WorkoutScreen';
 import { WorkoutLive } from '@/components/workout/WorkoutLive';
 import { CorridaLive } from '@/components/workout/CorridaLive';
+import { CiclismoLive } from '@/components/workout/CiclismoLive';
+import { NatacaoLive } from '@/components/workout/NatacaoLive';
+import { HyroxLive } from '@/components/workout/HyroxLive';
 import { PhoneFrame } from '@/components/workout/PhoneFrame';
 import { ReagendarButton } from '@/components/ReagendarButton';
 import { useAuth } from '@/contexts/AuthContext';
@@ -125,6 +128,54 @@ export default function AlunoTreino() {
           />
         )}
         <CorridaLive treino={treino} alunoId={alunoIdAtual} />
+      </>
+    );
+  }
+
+  // Treino real: ciclismo → CiclismoLive (zonas FTP + blocos com check)
+  if (!isDemo && treino && treino.detalhes.tipo === 'ciclismo') {
+    return (
+      <>
+        {treino.status !== 'CONCLUIDO' && treino.status !== 'PULADO' && (
+          <ReagendarButton
+            treinoId={treino.id}
+            dataAtual={treino.dataAlvo}
+            onReagendado={(iso) => setTreino({ ...treino, dataAlvo: iso })}
+          />
+        )}
+        <CiclismoLive treino={treino} />
+      </>
+    );
+  }
+
+  // Treino real: natação → NatacaoLive (CSS + séries com RI/Send-off)
+  if (!isDemo && treino && treino.detalhes.tipo === 'natacao') {
+    return (
+      <>
+        {treino.status !== 'CONCLUIDO' && treino.status !== 'PULADO' && (
+          <ReagendarButton
+            treinoId={treino.id}
+            dataAtual={treino.dataAlvo}
+            onReagendado={(iso) => setTreino({ ...treino, dataAlvo: iso })}
+          />
+        )}
+        <NatacaoLive treino={treino} />
+      </>
+    );
+  }
+
+  // Treino real: hyrox → HyroxLive (checklist + cronômetro AMRAP/EMOM)
+  if (!isDemo && treino && treino.detalhes.tipo === 'hyrox') {
+    return (
+      <>
+        {treino.status !== 'CONCLUIDO' && treino.status !== 'PULADO' && (
+          <ReagendarButton
+            treinoId={treino.id}
+            dataAtual={treino.dataAlvo}
+            onReagendado={(iso) => setTreino({ ...treino, dataAlvo: iso })}
+          />
+        )}
+        <HyroxLive treino={treino} />
       </>
     );
   }
