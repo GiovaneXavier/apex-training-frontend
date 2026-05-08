@@ -1,7 +1,9 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { ReloadPrompt } from './components/ReloadPrompt';
 import { useAuth, dashboardPathFor } from './contexts/AuthContext';
+import { useNetworkSync } from './hooks/useNetworkSync';
 
 import Login from './pages/auth/Login';
 import Cadastro from './pages/auth/Cadastro';
@@ -28,8 +30,12 @@ import NutriDashboard from './pages/nutricionista/Dashboard';
 import NutriAlunoDetalhe from './pages/nutricionista/AlunoDetalhe';
 
 export default function App() {
+  // Drena fila offline → backend quando a rede volta. Idempotente.
+  useNetworkSync();
+
   return (
-    <Routes>
+    <>
+      <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/cadastro" element={<Cadastro />} />
@@ -111,7 +117,9 @@ export default function App() {
       />
 
       <Route path="*" element={<NotFound />} />
-    </Routes>
+      </Routes>
+      <ReloadPrompt />
+    </>
   );
 }
 
