@@ -64,10 +64,21 @@ export const T_DARK = {
   radiusLg: 22,
 } as const;
 
-export type ThemeTokens = typeof T_LIGHT;
+// Alarga literais do `as const` (ex.: "#fafaf9" → string) e remove readonly.
+// Sem isto, T_DARK não é atribuível a typeof T_LIGHT, e o spread com
+// accentOverride (`string`) quebra contra os literais.
+type WidenLiterals<T> = {
+  -readonly [K in keyof T]: T[K] extends string
+    ? string
+    : T[K] extends number
+      ? number
+      : T[K];
+};
+
+export type ThemeTokens = WidenLiterals<typeof T_LIGHT>;
 
 export function getTheme(name: ThemeName, accentOverride?: string): ThemeTokens {
-  const base = name === 'dark' ? T_DARK : T_LIGHT;
+  const base: ThemeTokens = name === 'dark' ? T_DARK : T_LIGHT;
   if (!accentOverride) return base;
   return {
     ...base,

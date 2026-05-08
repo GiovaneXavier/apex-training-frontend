@@ -17,6 +17,8 @@ import { FinalizeCTA } from './FinalizeCTA';
 import { BottomTabs } from './BottomTabs';
 import { OfflineBanner } from './OfflineBanner';
 import { PRCelebration } from './PRCelebration';
+import { WorkoutNavBar } from './WorkoutNavBar';
+import { ExerciseListSheet } from './ExerciseListSheet';
 
 type Props = {
   treino: Treino;
@@ -31,6 +33,12 @@ export function WorkoutLive({ treino, theme, density = 'regular' }: Props) {
 
   const [erroFinalizacao, setErroFinalizacao] = useState<string | null>(null);
   const [historico, setHistorico] = useState<Record<string, HistoricoCarga>>({});
+  const [listOpen, setListOpen] = useState(false);
+  // Alias do estado persistido — UI lê/escreve via setActiveIdx para
+  // manter ergonomia local (`activeIdx`/`setActiveIdx`) sem perder o
+  // benefício da persistência em localStorage do hook.
+  const activeIdx = exec.state.currentExercicio;
+  const setActiveIdx = exec.setExercicio;
 
   // Carrega histórico de cargas do aluno para os exercícios deste treino.
   // Usa como sugestão quando a prescrição não traz cargaKg explícita.
@@ -135,6 +143,7 @@ export function WorkoutLive({ treino, theme, density = 'regular' }: Props) {
           exerciseIndex={exec.state.currentExercicio + 1}
           exerciseTotal={exec.state.exercicios.length}
           exerciseName={exAtual.nome}
+          videoUrl={exAtualPrescrito?.videoUrl ?? null}
           videoDuration="—:—"
           series={`${exAtual.series} × ${exAtual.reps ?? '—'}`}
           cargaAlvo={exAtualPrescrito?.prescrito.cargaKg ? `${exAtualPrescrito.prescrito.cargaKg}kg` : exAtualPrescrito?.prescrito.cargaPctRP ? `${exAtualPrescrito.prescrito.cargaPctRP}%` : '—'}
@@ -179,6 +188,16 @@ export function WorkoutLive({ treino, theme, density = 'regular' }: Props) {
           <NextExerciseBar t={t} density={density} onNext={exec.proximoExercicio} />
         )}
 
+        <WorkoutNavBar
+          t={t}
+          density={density}
+          activeIdx={activeIdx}
+          total={exec.state.exercicios.length}
+          onPrev={() => setActiveIdx(activeIdx - 1)}
+          onNext={() => setActiveIdx(activeIdx + 1)}
+          onOpenList={() => setListOpen(true)}
+        />
+
         <FinalizeCTA
           t={t}
           density={density}
@@ -187,6 +206,19 @@ export function WorkoutLive({ treino, theme, density = 'regular' }: Props) {
         />
       </div>
       <BottomTabs t={t} />
+
+      <ExerciseListSheet
+        t={t}
+        density={density}
+        open={listOpen}
+        exercicios={exec.state.exercicios}
+        activeIdx={activeIdx}
+        onSelect={(idx) => {
+          setActiveIdx(idx);
+          setListOpen(false);
+        }}
+        onClose={() => setListOpen(false)}
+      />
 
       {exec.novosRecordes.length > 0 && (
         <PRCelebration

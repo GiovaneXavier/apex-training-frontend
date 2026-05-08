@@ -13,13 +13,15 @@ type TabDef = {
 const TABS: TabDef[] = [
   { id: 'treinos', label: 'Treinos', href: '/aluno/dashboard', icon: TabIconDumb },
   { id: 'agenda', label: 'Agenda', href: '/aluno/calendario', icon: TabIconCalendar },
-  { id: 'progresso', label: 'RPs', href: '/aluno/rps', icon: TabIconChart },
+  { id: 'progresso', label: 'Progresso', href: '/aluno/progresso', icon: TabIconChart },
   { id: 'perfil', label: 'Perfil', href: '/aluno/perfil', icon: TabIconUser },
 ];
 
 function activeFor(pathname: string): TabId {
   if (pathname.startsWith('/aluno/calendario')) return 'agenda';
+  if (pathname.startsWith('/aluno/progresso')) return 'progresso';
   if (pathname.startsWith('/aluno/rps')) return 'progresso';
+  if (pathname.startsWith('/aluno/evolucao')) return 'progresso';
   if (pathname.startsWith('/aluno/perfil')) return 'perfil';
   return 'treinos';
 }

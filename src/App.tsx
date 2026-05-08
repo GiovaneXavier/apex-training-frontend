@@ -1,7 +1,9 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { ReloadPrompt } from './components/ReloadPrompt';
 import { useAuth, dashboardPathFor } from './contexts/AuthContext';
+import { useNetworkSync } from './hooks/useNetworkSync';
 
 import Login from './pages/auth/Login';
 import Cadastro from './pages/auth/Cadastro';
@@ -12,6 +14,9 @@ import AlunoTreino from './pages/aluno/Treino';
 import AlunoCalendario from './pages/aluno/Calendario';
 import AlunoRPs from './pages/aluno/RPs';
 import AlunoPerfil from './pages/aluno/Perfil';
+import AlunoEvolucao from './pages/aluno/Evolucao';
+import AlunoEvolucaoNova from './pages/aluno/EvolucaoNova';
+import AlunoProgresso from './pages/aluno/Progresso';
 
 import ProfDashboard from './pages/professor/Dashboard';
 import ProfAlunos from './pages/professor/Alunos';
@@ -25,8 +30,12 @@ import NutriDashboard from './pages/nutricionista/Dashboard';
 import NutriAlunoDetalhe from './pages/nutricionista/AlunoDetalhe';
 
 export default function App() {
+  // Drena fila offline → backend quando a rede volta. Idempotente.
+  useNetworkSync();
+
   return (
-    <Routes>
+    <>
+      <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/cadastro" element={<Cadastro />} />
@@ -51,6 +60,18 @@ export default function App() {
       <Route
         path="/aluno/perfil"
         element={<ProtectedRoute roles={['ALUNO']}><AlunoPerfil /></ProtectedRoute>}
+      />
+      <Route
+        path="/aluno/evolucao"
+        element={<ProtectedRoute roles={['ALUNO']}><AlunoEvolucao /></ProtectedRoute>}
+      />
+      <Route
+        path="/aluno/evolucao/nova"
+        element={<ProtectedRoute roles={['ALUNO', 'NUTRICIONISTA', 'PROFESSOR']}><AlunoEvolucaoNova /></ProtectedRoute>}
+      />
+      <Route
+        path="/aluno/progresso"
+        element={<ProtectedRoute roles={['ALUNO']}><AlunoProgresso /></ProtectedRoute>}
       />
 
       <Route
@@ -96,7 +117,9 @@ export default function App() {
       />
 
       <Route path="*" element={<NotFound />} />
-    </Routes>
+      </Routes>
+      <ReloadPrompt />
+    </>
   );
 }
 
