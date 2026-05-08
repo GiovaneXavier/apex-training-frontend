@@ -76,100 +76,113 @@ export default function ProfCalendario() {
   const totalConcluidos = treinos.filter((t) => t.status === 'CONCLUIDO').length;
 
   return (
-    <div className="min-h-screen bg-bg text-ink pb-24">
-      <header className="px-5 pt-7 pb-4 flex items-center justify-between">
+    // Mesma estratégia do calendário do aluno: viewport-locked no desktop, scroll global no mobile.
+    <div className="min-h-screen bg-bg text-ink pb-24 lg:pb-0 lg:h-screen lg:min-h-0 lg:overflow-hidden lg:flex lg:flex-col">
+      <header className="px-5 pt-7 pb-4 flex items-center justify-between lg:flex-shrink-0">
         <Link to="/professor/dashboard" className="text-mono text-[11px] uppercase tracking-wider text-ink-muted font-bold">
           ← Dashboard
         </Link>
       </header>
 
-      <div className="px-5">
-        <div className="flex items-center justify-between mb-2">
-          <h1 className="text-[26px] font-bold tracking-tight">
-            {MONTHS[cursor.getMonth()]} <span className="text-ink-muted text-mono text-[18px] tabular">{cursor.getFullYear()}</span>
-          </h1>
-          <div className="flex gap-1.5">
-            <button onClick={() => setCursor(addMonths(cursor, -1))} className="size-8 rounded-full bg-surface border border-app-strong text-ink font-bold">‹</button>
-            <button onClick={() => setCursor(addMonths(cursor, 1))} className="size-8 rounded-full bg-surface border border-app-strong text-ink font-bold">›</button>
-          </div>
-        </div>
-
-        <div className="text-mono text-[10px] uppercase tracking-[0.6px] text-ink-subtle font-bold mb-5">
-          {totalTreinos} treinos · {totalConcluidos} concluídos
-        </div>
-
-        {error && (
-          <div className="px-3 py-2 mb-3 rounded-[10px] bg-danger-bg text-danger text-[12px] font-medium">{error}</div>
-        )}
-
-        <div className="grid grid-cols-7 gap-1 mb-2">
-          {DAYS_SHORT.map((d, i) => (
-            <div key={i} className="text-center text-[10px] uppercase tracking-[0.6px] text-ink-subtle font-bold text-mono py-1">
-              {d}
+      <div className="px-5 lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:grid lg:grid-cols-[minmax(360px,420px)_1fr] lg:gap-6 lg:px-6 lg:pb-6">
+        <div className="lg:flex lg:flex-col lg:min-h-0">
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-[26px] font-bold tracking-tight lg:text-2xl">
+              {MONTHS[cursor.getMonth()]} <span className="text-ink-muted text-mono text-[18px] tabular lg:text-base">{cursor.getFullYear()}</span>
+            </h1>
+            <div className="flex gap-1.5">
+              <button onClick={() => setCursor(addMonths(cursor, -1))} className="size-8 rounded-full bg-surface border border-app-strong text-ink font-bold">‹</button>
+              <button onClick={() => setCursor(addMonths(cursor, 1))} className="size-8 rounded-full bg-surface border border-app-strong text-ink font-bold">›</button>
             </div>
-          ))}
-        </div>
+          </div>
 
-        <div className="grid grid-cols-7 gap-1">
-          {days.map((d, i) => {
-            const key = dayKey(d.date);
-            const isCurrentMonth = d.date.getMonth() === cursor.getMonth();
-            const isToday = key === todayKey;
-            const isSel = diaSel === key;
-            const dets = detailsForDay(key);
-            const distinctAlunos = Array.from(
-              new Set(dets.treinos.map((t) => t.alunoId).concat(dets.provas.map((p) => p.alunoId))),
-            );
+          <div className="text-mono text-[10px] uppercase tracking-[0.6px] text-ink-subtle font-bold mb-5 lg:mb-3">
+            {totalTreinos} treinos · {totalConcluidos} concluídos
+          </div>
 
-            return (
-              <button
-                key={i}
-                onClick={() => setDiaSel(isSel ? null : key)}
-                className={cn(
-                  'aspect-square rounded-[10px] flex flex-col items-center justify-center gap-1 text-[12px] font-semibold transition-colors',
-                  !isCurrentMonth && 'opacity-30',
-                  isSel ? 'bg-ink text-bg' : isToday ? 'bg-accent text-accent-ink' : 'bg-surface text-ink',
-                  !isSel && !isToday && 'border border-app',
-                )}
-              >
-                <span className="text-mono tabular">{d.date.getDate()}</span>
-                <div className="flex gap-0.5 h-1 max-w-[28px] flex-wrap justify-center">
-                  {distinctAlunos.slice(0, 5).map((aId) => {
-                    const cls = alunoColorMap.get(aId) ?? 'bg-ink-subtle';
-                    const colorClass = cls.split(' ')[0]; // pega só o bg-*
-                    return (
-                      <span
-                        key={aId}
-                        className={cn(
-                          'size-1 rounded-full',
-                          isSel ? 'bg-current' : isToday ? 'bg-current' : colorClass,
-                        )}
-                      />
-                    );
-                  })}
-                </div>
-              </button>
-            );
-          })}
-        </div>
+          {error && (
+            <div className="px-3 py-2 mb-3 rounded-[10px] bg-danger-bg text-danger text-[12px] font-medium">{error}</div>
+          )}
 
-        {/* Legenda alunos */}
-        {alunoColorMap.size > 0 && (
-          <div className="mt-3 mb-5 flex flex-wrap gap-1.5">
-            {Array.from(alunoColorMap.entries()).map(([alunoId, colorCls]) => {
-              const t = treinos.find((tt) => tt.alunoId === alunoId) ?? provas.find((pp) => pp.alunoId === alunoId);
-              if (!t) return null;
-              const nome = (t as { alunoNome?: string }).alunoNome ?? 'Aluno';
+          <div className="grid grid-cols-7 gap-1 mb-2 lg:gap-0.5">
+            {DAYS_SHORT.map((d, i) => (
+              <div key={i} className="text-center text-[10px] uppercase tracking-[0.6px] text-ink-subtle font-bold text-mono py-1">
+                {d}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 lg:gap-0.5">
+            {days.map((d, i) => {
+              const key = dayKey(d.date);
+              const isCurrentMonth = d.date.getMonth() === cursor.getMonth();
+              const isToday = key === todayKey;
+              const isSel = diaSel === key;
+              const dets = detailsForDay(key);
+              const distinctAlunos = Array.from(
+                new Set(dets.treinos.map((t) => t.alunoId).concat(dets.provas.map((p) => p.alunoId))),
+              );
+
               return (
-                <span key={alunoId} className={cn('text-[10.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full', colorCls)}>
-                  {nome.split(' ')[0]}
-                </span>
+                <button
+                  key={i}
+                  onClick={() => setDiaSel(isSel ? null : key)}
+                  className={cn(
+                    'aspect-square min-h-[40px] rounded-md flex flex-col items-center justify-center gap-1 text-sm font-semibold transition-colors',
+                    'lg:aspect-auto lg:h-9 lg:min-h-0 lg:gap-0.5 lg:text-[13px]',
+                    !isCurrentMonth && 'opacity-30',
+                    isSel ? 'bg-ink text-bg' : isToday ? 'bg-accent text-accent-ink' : 'bg-surface text-ink',
+                    !isSel && !isToday && 'border border-app',
+                  )}
+                >
+                  <span className="text-mono tabular">{d.date.getDate()}</span>
+                  <div className="flex gap-0.5 h-1 max-w-[28px] flex-wrap justify-center">
+                    {distinctAlunos.slice(0, 5).map((aId) => {
+                      const cls = alunoColorMap.get(aId) ?? 'bg-ink-subtle';
+                      const colorClass = cls.split(' ')[0]; // pega só o bg-*
+                      return (
+                        <span
+                          key={aId}
+                          className={cn(
+                            'size-1 rounded-full',
+                            isSel ? 'bg-current' : isToday ? 'bg-current' : colorClass,
+                          )}
+                        />
+                      );
+                    })}
+                  </div>
+                </button>
               );
             })}
           </div>
-        )}
 
-        {diaSel && <DiaDetails diaKey={diaSel} dets={detailsForDay(diaSel)} alunoColorMap={alunoColorMap} />}
+          {/* Legenda alunos */}
+          {alunoColorMap.size > 0 && (
+            <div className="mt-3 mb-5 flex flex-wrap gap-1.5 lg:mb-0">
+              {Array.from(alunoColorMap.entries()).map(([alunoId, colorCls]) => {
+                const t = treinos.find((tt) => tt.alunoId === alunoId) ?? provas.find((pp) => pp.alunoId === alunoId);
+                if (!t) return null;
+                const nome = (t as { alunoNome?: string }).alunoNome ?? 'Aluno';
+                return (
+                  <span key={alunoId} className={cn('text-[10.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full', colorCls)}>
+                    {nome.split(' ')[0]}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Coluna direita: lista do dia. Scroll isolado no desktop. */}
+        <div className="lg:min-h-0 lg:overflow-y-auto lg:pr-2">
+          {diaSel ? (
+            <DiaDetails diaKey={diaSel} dets={detailsForDay(diaSel)} alunoColorMap={alunoColorMap} />
+          ) : (
+            <div className="hidden lg:block px-4 py-8 text-ink-subtle text-[13px] bg-surface rounded-[14px] border border-app text-center">
+              Selecione um dia no calendário ao lado.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

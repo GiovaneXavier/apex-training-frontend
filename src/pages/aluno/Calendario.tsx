@@ -123,82 +123,99 @@ export default function AlunoCalendario() {
   const todayKey = dayKey(today);
 
   return (
-    <div className="min-h-screen bg-bg text-ink pb-24">
-      <header className="px-5 pt-7 pb-4 flex items-center justify-between">
+    // Mobile: scroll global (pb-24 abre espaço pro AlunoTabs fixo).
+    // Desktop (lg+): viewport-locked, sem scroll de página — split em 2 colunas.
+    <div className="min-h-screen bg-bg text-ink pb-24 lg:pb-0 lg:h-screen lg:min-h-0 lg:overflow-hidden lg:flex lg:flex-col">
+      <header className="px-5 pt-7 pb-4 flex items-center justify-between lg:flex-shrink-0">
         <Link to="/aluno/dashboard" className="text-mono text-[11px] uppercase tracking-wider text-ink-muted font-bold">
           ← Dashboard
         </Link>
       </header>
 
-      <div className="px-5">
-        <div className="flex items-center justify-between mb-5">
-          <h1 className="text-[26px] font-bold tracking-tight">
-            {MONTHS[cursor.getMonth()]} <span className="text-ink-muted text-mono text-[18px] tabular">{cursor.getFullYear()}</span>
-          </h1>
-          <div className="flex gap-1.5">
-            <button onClick={() => setCursor(addMonths(cursor, -1))} className="size-8 rounded-full bg-surface border border-app-strong text-ink font-bold">‹</button>
-            <button onClick={() => setCursor(addMonths(cursor, 1))} className="size-8 rounded-full bg-surface border border-app-strong text-ink font-bold">›</button>
-          </div>
-        </div>
-
-        {error && (
-          <div className="px-3 py-2 mb-3 rounded-[10px] bg-danger-bg text-danger text-[12px] font-medium">{error}</div>
-        )}
-
-        <div className="grid grid-cols-7 gap-1 mb-2">
-          {DAYS_SHORT.map((d, i) => (
-            <div key={i} className="text-center text-[10px] uppercase tracking-[0.6px] text-ink-subtle font-bold text-mono py-1">
-              {d}
+      {/* Split desktop: calendário fixo à esquerda, lista do dia rolável à direita.
+          minmax(360px,420px) trava largura previsível pro grid do calendário. */}
+      <div className="px-5 lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:grid lg:grid-cols-[minmax(360px,420px)_1fr] lg:gap-6 lg:px-6 lg:pb-6">
+        <div className="lg:flex lg:flex-col lg:min-h-0">
+          <div className="flex items-center justify-between mb-5 lg:mb-3">
+            <h1 className="text-[26px] font-bold tracking-tight lg:text-2xl">
+              {MONTHS[cursor.getMonth()]} <span className="text-ink-muted text-mono text-[18px] tabular lg:text-base">{cursor.getFullYear()}</span>
+            </h1>
+            <div className="flex gap-1.5">
+              <button onClick={() => setCursor(addMonths(cursor, -1))} className="size-8 rounded-full bg-surface border border-app-strong text-ink font-bold">‹</button>
+              <button onClick={() => setCursor(addMonths(cursor, 1))} className="size-8 rounded-full bg-surface border border-app-strong text-ink font-bold">›</button>
             </div>
-          ))}
+          </div>
+
+          {error && (
+            <div className="px-3 py-2 mb-3 rounded-[10px] bg-danger-bg text-danger text-[12px] font-medium">{error}</div>
+          )}
+
+          <div className="grid grid-cols-7 gap-1 mb-2 lg:gap-0.5">
+            {DAYS_SHORT.map((d, i) => (
+              <div key={i} className="text-center text-[10px] uppercase tracking-[0.6px] text-ink-subtle font-bold text-mono py-1">
+                {d}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 lg:gap-0.5">
+            {days.map((d, i) => {
+              const key = dayKey(d.date);
+              const isCurrentMonth = d.date.getMonth() === cursor.getMonth();
+              const isToday = key === todayKey;
+              const itens = itensDia(key);
+              const hasTreino = itens.some((i) => i.kind === 'treino');
+              const hasProva = itens.some((i) => i.kind === 'prova');
+              // Rotina projetada só conta se ainda não há treino instanciado nesse dia
+              const hasRotina = !hasTreino && (rotinasProjetadasByDay.get(key)?.length ?? 0) > 0;
+              const isSel = diaSel === key;
+
+              return (
+                <button
+                  key={i}
+                  onClick={() => setDiaSel(isSel ? null : key)}
+                  className={cn(
+                    // Mobile: aspect-square (touch ~52px+) — desktop: célula compacta h-9.
+                    // min-h-[40px] garante touch target ≥ 40px mesmo se aspect-square ficar pequeno em telas estreitas.
+                    'aspect-square min-h-[40px] rounded-md flex flex-col items-center justify-center gap-1 text-sm font-semibold transition-colors',
+                    'lg:aspect-auto lg:h-9 lg:min-h-0 lg:gap-0.5 lg:text-[13px]',
+                    !isCurrentMonth && 'opacity-30',
+                    isSel ? 'bg-ink text-bg' : isToday ? 'bg-accent text-accent-ink' : 'bg-surface text-ink',
+                    !isSel && !isToday && 'border border-app',
+                  )}
+                >
+                  <span className="text-mono tabular">{d.date.getDate()}</span>
+                  <div className="flex gap-0.5 h-1">
+                    {hasTreino && <span className={cn('size-1 rounded-full', isSel || isToday ? 'bg-current' : 'bg-accent')} />}
+                    {hasRotina && <span className={cn('size-1 rounded-full opacity-60', isSel || isToday ? 'bg-current' : 'bg-accent')} />}
+                    {hasProva && <span className={cn('size-1 rounded-full', isSel || isToday ? 'bg-current' : 'bg-pr')} />}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <Legend />
         </div>
 
-        <div className="grid grid-cols-7 gap-1">
-          {days.map((d, i) => {
-            const key = dayKey(d.date);
-            const isCurrentMonth = d.date.getMonth() === cursor.getMonth();
-            const isToday = key === todayKey;
-            const itens = itensDia(key);
-            const hasTreino = itens.some((i) => i.kind === 'treino');
-            const hasProva = itens.some((i) => i.kind === 'prova');
-            // Rotina projetada só conta se ainda não há treino instanciado nesse dia
-            const hasRotina = !hasTreino && (rotinasProjetadasByDay.get(key)?.length ?? 0) > 0;
-            const isSel = diaSel === key;
-
-            return (
-              <button
-                key={i}
-                onClick={() => setDiaSel(isSel ? null : key)}
-                className={cn(
-                  'aspect-square rounded-[10px] flex flex-col items-center justify-center gap-1 text-[12px] font-semibold transition-colors',
-                  !isCurrentMonth && 'opacity-30',
-                  isSel ? 'bg-ink text-bg' : isToday ? 'bg-accent text-accent-ink' : 'bg-surface text-ink',
-                  !isSel && !isToday && 'border border-app',
-                )}
-              >
-                <span className="text-mono tabular">{d.date.getDate()}</span>
-                <div className="flex gap-0.5 h-1">
-                  {hasTreino && <span className={cn('size-1 rounded-full', isSel || isToday ? 'bg-current' : 'bg-accent')} />}
-                  {hasRotina && <span className={cn('size-1 rounded-full opacity-60', isSel || isToday ? 'bg-current' : 'bg-accent')} />}
-                  {hasProva && <span className={cn('size-1 rounded-full', isSel || isToday ? 'bg-current' : 'bg-pr')} />}
-                </div>
-              </button>
-            );
-          })}
+        {/* Coluna direita no desktop = lista de detalhes do dia, scroll isolado.
+            No mobile vira só o conteúdo abaixo do calendário (scroll global). */}
+        <div className="lg:min-h-0 lg:overflow-y-auto lg:pr-2">
+          {diaSel ? (
+            <DiaDetails
+              key={diaSel}
+              diaKey={diaSel}
+              treinos={treinosByDay.get(diaSel) ?? []}
+              provas={provasByDay.get(diaSel) ?? []}
+              rotinas={(treinosByDay.get(diaSel)?.length ?? 0) > 0 ? [] : rotinasProjetadasByDay.get(diaSel) ?? []}
+              onIniciarRotina={(rotinaId) => onIniciarRotina(rotinaId, diaSel)}
+            />
+          ) : (
+            <div className="hidden lg:block px-4 py-8 text-ink-subtle text-[13px] bg-surface rounded-[14px] border border-app text-center">
+              Selecione um dia no calendário ao lado.
+            </div>
+          )}
         </div>
-
-        <Legend />
-
-        {diaSel && (
-          <DiaDetails
-            key={diaSel}
-            diaKey={diaSel}
-            treinos={treinosByDay.get(diaSel) ?? []}
-            provas={provasByDay.get(diaSel) ?? []}
-            rotinas={(treinosByDay.get(diaSel)?.length ?? 0) > 0 ? [] : rotinasProjetadasByDay.get(diaSel) ?? []}
-            onIniciarRotina={(rotinaId) => onIniciarRotina(rotinaId, diaSel)}
-          />
-        )}
       </div>
 
       <AlunoTabs />
