@@ -42,9 +42,13 @@ export function WorkoutLive({ treino, theme, density = 'regular' }: Props) {
 
   // Carrega histórico de cargas do aluno para os exercícios deste treino.
   // Usa como sugestão quando a prescrição não traz cargaKg explícita.
+  //
+  // PR #7: passa o nome CANONICAL (sem toLowerCase). O backend usa @>
+  // containment com índice GIN no Treino.detalhes, que exige match
+  // case-sensitive — alinhado com o snapshot gravado no JSON.
   useEffect(() => {
     if (treino.detalhes.tipo !== 'musculacao') return;
-    const nomes = treino.detalhes.exercicios.map((e) => e.nome.toLowerCase());
+    const nomes = treino.detalhes.exercicios.map((e) => e.nome);
     getHistoricoCargas(nomes).then(setHistorico).catch(() => {});
   }, [treino.id]);
 
@@ -160,7 +164,7 @@ export function WorkoutLive({ treino, theme, density = 'regular' }: Props) {
         />
 
         {!exercicioCompleto && (() => {
-          const historicoEx = historico[exAtual.nome.toLowerCase()];
+          const historicoEx = historico[exAtual.nome];
           const cargaSugerida =
             exAtualPrescrito?.prescrito.cargaKg
             ?? historicoEx?.kg
