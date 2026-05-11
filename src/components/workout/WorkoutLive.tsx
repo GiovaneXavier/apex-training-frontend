@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { getTheme, type DensityName, type ThemeName } from '@/themes/tokens';
 import { useExecucaoTreino } from '@/hooks/useExecucaoTreino';
@@ -31,7 +32,6 @@ export function WorkoutLive({ treino, theme, density = 'regular' }: Props) {
   const navigate = useNavigate();
   const exec = useExecucaoTreino(treino);
 
-  const [erroFinalizacao, setErroFinalizacao] = useState<string | null>(null);
   const [historico, setHistorico] = useState<Record<string, HistoricoCarga>>({});
   const [listOpen, setListOpen] = useState(false);
   // Alias do estado persistido — UI lê/escreve via setActiveIdx para
@@ -76,11 +76,14 @@ export function WorkoutLive({ treino, theme, density = 'regular' }: Props) {
   }
 
   async function onFinalizar() {
-    setErroFinalizacao(null);
     try {
       await exec.finalizar();
+      // Sucesso silencioso aqui — PRCelebration cobre o feedback positivo
+      // quando há novos RPs, e a navegação automática serve como ack visual.
     } catch (err) {
-      setErroFinalizacao(apiErrorMessage(err));
+      // SyncBanner já mostra exec.state.syncError quando finalizar setou pending.
+      // Toast cobre erros de fluxo (network down sem fila, 5xx, etc).
+      toast.error(apiErrorMessage(err));
     }
   }
 
@@ -135,7 +138,7 @@ export function WorkoutLive({ treino, theme, density = 'regular' }: Props) {
           <SyncBanner t={t} density={density} kind="syncing" />
         )}
         {exec.state.syncStatus === 'error' && (
-          <SyncBanner t={t} density={density} kind="error" message={exec.state.syncError ?? erroFinalizacao ?? undefined} />
+          <SyncBanner t={t} density={density} kind="error" message={exec.state.syncError ?? undefined} />
         )}
 
         <ProgressStrip t={t} current={exec.exerciciosCompletos} total={exec.state.exercicios.length} density={density} />

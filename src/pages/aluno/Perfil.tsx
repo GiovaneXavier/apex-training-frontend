@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { AlunoTabs } from '@/components/AlunoTabs';
 import { useAuth } from '@/contexts/AuthContext';
@@ -34,8 +35,6 @@ export default function AlunoPerfil() {
   const [strava, setStrava] = useState<StravaStatus | null>(null);
   const [atividades, setAtividades] = useState<AtividadeStrava[]>([]);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState<'idle' | 'sync' | 'disconnect'>('idle');
 
   async function refresh() {
@@ -55,24 +54,37 @@ export default function AlunoPerfil() {
         setAtividades([]);
       }
     } catch (err) {
-      setError(apiErrorMessage(err));
+      toast.error(apiErrorMessage(err));
     }
   }
 
   useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user?.aluno?.id]);
 
+  // Callback do redirect OAuth Strava ecoa `?strava=ok|error` no query param.
   useEffect(() => {
     const flag = params.get('strava');
-    if (flag === 'ok') setInfo('Strava conectado com sucesso!');
-    else if (flag === 'error') setError('Falha ao conectar Strava');
+    if (flag === 'ok') toast.success('Strava conectado com sucesso!');
+    else if (flag === 'error') toast.error('Falha ao conectar Strava');
   }, [params]);
 
   async function onAceitar(id: string) {
-    try { await aceitarNutri(id); await refresh(); } catch (err) { setError(apiErrorMessage(err)); }
+    try {
+      await aceitarNutri(id);
+      await refresh();
+      toast.success('Nutricionista aceito');
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
   }
   async function onRecusar(id: string) {
     if (!confirm('Recusar/remover este nutricionista?')) return;
-    try { await recusarNutri(id); await refresh(); } catch (err) { setError(apiErrorMessage(err)); }
+    try {
+      await recusarNutri(id);
+      await refresh();
+      toast.success('Nutricionista removido');
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
   }
 
   function onConectarStrava() {
@@ -80,22 +92,23 @@ export default function AlunoPerfil() {
       window.location.href = buildStravaAuthUrl();
     } catch (err) {
       // Erro síncrono típico aqui: VITE_STRAVA_CLIENT_ID ausente no .env.
-      // Loga para devtools antes de exibir a mensagem.
       console.error('[Strava] falha ao montar URL OAuth:', err);
-      setError(apiErrorMessage(err));
+      toast.error(apiErrorMessage(err));
     }
   }
 
   async function onSincronizar() {
-    setError(null);
     setBusy('sync');
     try {
       const r = await syncStrava();
       setSyncResult(r);
-      setInfo(`${r.novas} ${r.novas === 1 ? 'nova atividade' : 'novas atividades'} · ${r.total} retornadas`);
+      const msg = r.novas === 0
+        ? `Nenhuma atividade nova · ${r.total} verificadas`
+        : `${r.novas} ${r.novas === 1 ? 'nova atividade' : 'novas atividades'} · ${r.total} verificadas`;
+      toast.success(msg);
       await refresh();
     } catch (err) {
-      setError(apiErrorMessage(err));
+      toast.error(apiErrorMessage(err));
     } finally {
       setBusy('idle');
     }
@@ -107,9 +120,9 @@ export default function AlunoPerfil() {
     try {
       await disconnectStrava();
       await refresh();
-      setInfo('Strava desconectado');
+      toast.success('Strava desconectado');
     } catch (err) {
-      setError(apiErrorMessage(err));
+      toast.error(apiErrorMessage(err));
     } finally {
       setBusy('idle');
     }
@@ -139,13 +152,6 @@ export default function AlunoPerfil() {
             <div className="text-[12px] text-ink-muted">{user?.email}</div>
           </div>
         </div>
-
-        {error && (
-          <div className="px-3 py-2 mb-3 rounded-[10px] bg-danger-bg text-danger text-[12px] font-medium">{error}</div>
-        )}
-        {info && !error && (
-          <div className="px-3 py-2 mb-3 rounded-[10px] bg-success-bg text-success-ink text-[12px] font-medium">{info}</div>
-        )}
 
         <Section title="Nutricionistas" subtitle="Aceite o convite para compartilhar sua rotina.">
           {nutris.length === 0 ? (

@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
+import { toast } from 'sonner';
+
 import { useWorkoutStore } from '@/lib/store/useWorkoutStore';
 import { salvarExecucao } from '@/lib/api/execucao';
+import { apiErrorMessage } from '@/lib/api';
 import type { SetRealizado, Treino } from '@/types/treino';
 
 // Sync da fila offline → backend.
@@ -46,6 +49,10 @@ async function flushPending(): Promise<void> {
   const entries = Object.values(pending);
   if (entries.length === 0) return;
 
+  let okCount = 0;
+  let failCount = 0;
+  let lastErrMsg: string | null = null;
+
   // Sequencial em vez de Promise.all: evita estouro de rate-limit do
   // backend no Render free e mantém ordem determinística de logs.
   for (const item of entries) {
@@ -64,11 +71,29 @@ async function flushPending(): Promise<void> {
       }
       await salvarExecucao(item.treinoId, payload);
       clearPending(item.treinoId);
+      okCount++;
     } catch (err) {
       // Falha numa fila não interrompe as outras. Próximo evento 'online'
       // (ou retry manual) tenta de novo.
       console.warn('[sync] falha ao enviar', item.treinoId, err);
+      failCount++;
+      lastErrMsg = apiErrorMessage(err);
     }
+  }
+
+  // Feedback agregado — uma única toast cobrindo o batch.
+  // Audit #4.4: antes ficava só em console.warn (silencioso pro atleta).
+  if (okCount > 0 && failCount === 0) {
+    toast.success(
+      okCount === 1 ? 'Treino sincronizado' : `${okCount} treinos sincronizados`,
+    );
+  } else if (failCount > 0) {
+    toast.error(
+      `Falha ao sincronizar ${failCount} treino${failCount > 1 ? 's' : ''}` +
+        (lastErrMsg ? ` · ${lastErrMsg}` : '') +
+        '. Tentaremos de novo quando voltar online.',
+      { duration: 6000 },
+    );
   }
 }
 
