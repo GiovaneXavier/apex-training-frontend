@@ -76,8 +76,14 @@ export default function AlunoPerfil() {
   }
 
   function onConectarStrava() {
-    try { window.location.href = buildStravaAuthUrl(); }
-    catch (err) { setError(apiErrorMessage(err)); }
+    try {
+      window.location.href = buildStravaAuthUrl();
+    } catch (err) {
+      // Erro síncrono típico aqui: VITE_STRAVA_CLIENT_ID ausente no .env.
+      // Loga para devtools antes de exibir a mensagem.
+      console.error('[Strava] falha ao montar URL OAuth:', err);
+      setError(apiErrorMessage(err));
+    }
   }
 
   async function onSincronizar() {

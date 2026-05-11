@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { apiErrorMessage } from '@/lib/api';
-import { connectStrava } from '@/lib/api/strava';
+import { connectStrava, consumeStravaState, verifyStravaState } from '@/lib/api/strava';
 
 export default function StravaCallback() {
   const [params] = useSearchParams();
@@ -13,6 +13,7 @@ export default function StravaCallback() {
   const ranRef = useRef(false);
 
   const code = params.get('code');
+  const stateFromUrl = params.get('state');
   const stravaError = params.get('error');
 
   useEffect(() => {
@@ -29,17 +30,32 @@ export default function StravaCallback() {
       return;
     }
     if (!user) {
-      // Usuário não está logado — manda para login preservando o code (raro)
+      // Usuário não logado quando voltou — manda pro login.
       navigate('/login', { replace: true });
       return;
     }
 
-    connectStrava(code)
+    // ── Validação do state (PR #6) ───────────────────────────────
+    // consumeStravaState é one-shot: leu, apagou. Replay attempt depois
+    // disso retorna null e cai em "state ausente".
+    const expectedState = consumeStravaState();
+    if (!stateFromUrl || !expectedState) {
+      setError('Fluxo OAuth incompleto. Inicie a conexão novamente pelo perfil.');
+      return;
+    }
+    if (!verifyStravaState(stateFromUrl, expectedState)) {
+      // Mismatch = possível Account Linking Hijacking. Aborta antes de
+      // tocar o backend. Mensagem deliberadamente curta — não dar dicas
+      // sobre o formato esperado.
+      setError('Falha de validação OAuth. Tente conectar novamente.');
+      return;
+    }
+
+    connectStrava(code, stateFromUrl)
       .then(() => navigate('/aluno/perfil?strava=ok', { replace: true }))
       .catch((err) => setError(apiErrorMessage(err)));
-  }, [code, stravaError, user, loading, navigate]);
+  }, [code, stateFromUrl, stravaError, user, loading, navigate]);
 
-  // Se aluno e callback OK, redirecionamos via efeito; se não-aluno, manda pro dashboard certo
   if (!loading && user && user.role !== 'ALUNO') {
     return <Navigate to="/" replace />;
   }
@@ -54,7 +70,7 @@ export default function StravaCallback() {
           <div className="text-mono text-[11px] uppercase tracking-[0.7px] font-bold text-ink-subtle mb-1">
             Conectando ao Strava
           </div>
-          <div className="text-[14px] text-ink-muted">Salvando seu token de acesso...</div>
+          <div className="text-[14px] text-ink-muted">Validando e salvando seu token de acesso...</div>
         </>
       ) : (
         <>
