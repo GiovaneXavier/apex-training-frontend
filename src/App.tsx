@@ -5,7 +5,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { ReloadPrompt } from './components/ReloadPrompt';
 import { useAuth, dashboardPathFor } from './contexts/AuthContext';
 import { useTheme } from './contexts/ThemeContext';
-import { useNetworkSync } from './hooks/useNetworkSync';
+import { useOfflineSync } from './hooks/useOfflineSync';
 
 import Login from './pages/auth/Login';
 import Cadastro from './pages/auth/Cadastro';
@@ -32,8 +32,9 @@ import NutriDashboard from './pages/nutricionista/Dashboard';
 import NutriAlunoDetalhe from './pages/nutricionista/AlunoDetalhe';
 
 export default function App() {
-  // Drena fila offline → backend quando a rede volta. Idempotente.
-  useNetworkSync();
+  // Drena fila offline (lib/offline/saveQueue) → backend quando a rede volta.
+  // Idempotente; sequencial; toast resumido no final do batch.
+  useOfflineSync();
   const { theme } = useTheme();
 
   return (
