@@ -6,10 +6,13 @@ import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
 
 // PWA — premissa: aluno abre o app no ginásio, conexão instável.
-// Estratégia: App Shell pré-cacheada (carrega offline) + runtime caching
-// para fontes/ícones/imagens. API NÃO é cacheada (dados de execução
-// precisam de fonte da verdade — offline-first dos treinos é responsabilidade
-// do store local, não do Service Worker).
+// Estratégia (PR #9): App Shell pré-cacheada (carrega offline) +
+//   NetworkFirst para GET /api/* (offline-readable após primeiro fetch)
+//   + StaleWhileRevalidate para imagens/fontes
+//   + fila app-level (lib/offline/saveQueue) para POSTs.
+//
+// POSTs (mutações) NÃO entram no SW — usam fila própria em IDB que
+// preserva auth/CSRF state. Workbox por default já ignora POST/PUT/DELETE.
 export default defineConfig({
   plugins: [
     react(),
@@ -56,7 +59,54 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [
           {
-            // Google Fonts (CSS) — quase imutável
+            urlPattern: /\/api\/treinos(\/|\?|$)/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'apex-api-treinos',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 7 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // /api/rotinas/* — listagens, rotina por id, dia.
+            urlPattern: /\/api\/rotinas(\/|\?|$)/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'apex-api-rotinas',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 * 7 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // /api/auth/me — hidratação da sessão. Cache curto (1h) porque
+            // o cookie HttpOnly continua válido; estado do user muda lento.
+            urlPattern: /\/api\/auth\/me(\?|$)/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'apex-api-me',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Dados secundários: aluno (vinculos/desempenho), rps, evolucoes,
+            // strava status/atividades. Cache curto (1 dia) — não mostrar
+            // streak/RP defasado.
+            urlPattern: /\/api\/(aluno|rps|evolucoes|strava)(\/|\?|$)/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'apex-api-misc',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+
+          // ── Fontes Google (CSS + arquivos .woff2) ─────────────────
+          {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'StaleWhileRevalidate',
             options: {
@@ -65,7 +115,6 @@ export default defineConfig({
             },
           },
           {
-            // Google Fonts (arquivos .woff2) — imutável, cache longo
             urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
             handler: 'CacheFirst',
             options: {
@@ -74,8 +123,9 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
+
+          // ── Imagens (ícones, S3/CloudFront de evolução) ──────────
           {
-            // Imagens (ícones de exercícios, fotos de evolução servidas pelo S3/CloudFront)
             urlPattern: ({ request }) => request.destination === 'image',
             handler: 'StaleWhileRevalidate',
             options: {

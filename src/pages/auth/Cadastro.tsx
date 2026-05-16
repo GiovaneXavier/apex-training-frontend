@@ -24,6 +24,7 @@ export default function Cadastro() {
   const [crn, setCrn] = useState('');
   const [bio, setBio] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [pendingMsg, setPendingMsg] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   if (user) return <Navigate to={dashboardPathFor(user.role)} replace />;
@@ -31,9 +32,10 @@ export default function Cadastro() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setPendingMsg(null);
     setSubmitting(true);
     try {
-      const u = await register({
+      const result = await register({
         nome: nome.trim(),
         email: email.trim(),
         senha,
@@ -41,7 +43,12 @@ export default function Cadastro() {
         crn: role === 'NUTRICIONISTA' ? crn.trim() || undefined : undefined,
         bio: role === 'PROFESSOR' ? bio.trim() || undefined : undefined,
       });
-      navigate(dashboardPathFor(u.role), { replace: true });
+      // PR #5: PROFESSOR/NUTRICIONISTA aguardam aprovação. ALUNO loga direto.
+      if (result.kind === 'pending') {
+        setPendingMsg(result.message);
+      } else {
+        navigate(dashboardPathFor(result.user.role), { replace: true });
+      }
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
@@ -136,6 +143,11 @@ export default function Cadastro() {
         {error && (
           <div className="mb-3 px-3 py-2 rounded-[10px] bg-danger-bg text-danger text-[12px] font-medium">
             {error}
+          </div>
+        )}
+        {pendingMsg && (
+          <div className="mb-3 px-3 py-2 rounded-[10px] bg-success-bg text-success-ink text-[12px] font-medium">
+            {pendingMsg}
           </div>
         )}
 

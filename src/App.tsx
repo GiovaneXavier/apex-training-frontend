@@ -1,9 +1,11 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { Toaster } from 'sonner';
 
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ReloadPrompt } from './components/ReloadPrompt';
 import { useAuth, dashboardPathFor } from './contexts/AuthContext';
-import { useNetworkSync } from './hooks/useNetworkSync';
+import { useTheme } from './contexts/ThemeContext';
+import { useOfflineSync } from './hooks/useOfflineSync';
 
 import Login from './pages/auth/Login';
 import Cadastro from './pages/auth/Cadastro';
@@ -30,11 +32,27 @@ import NutriDashboard from './pages/nutricionista/Dashboard';
 import NutriAlunoDetalhe from './pages/nutricionista/AlunoDetalhe';
 
 export default function App() {
-  // Drena fila offline → backend quando a rede volta. Idempotente.
-  useNetworkSync();
+  // Drena fila offline (lib/offline/saveQueue) → backend quando a rede volta.
+  // Idempotente; sequencial; toast resumido no final do batch.
+  useOfflineSync();
+  const { theme } = useTheme();
 
   return (
     <>
+      {/*
+        Toaster global — sobrevive a transições de rota (montado fora do
+        <Routes>). top-center é o sweet spot mobile: visível com o polegar
+        em viewport curto, não conflita com BottomTabs nem WorkoutNavBar.
+        richColors usa paleta semântica do Sonner alinhada com light/dark.
+      */}
+      <Toaster
+        theme={theme}
+        position="top-center"
+        richColors
+        closeButton
+        duration={4000}
+        toastOptions={{ className: 'text-mono text-[13px]' }}
+      />
       <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />

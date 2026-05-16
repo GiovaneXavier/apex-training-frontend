@@ -14,6 +14,7 @@ vi.mock('idb-keyval', () => {
     del: async (k: string) => {
       store.delete(k);
     },
+    keys: async () => Array.from(store.keys()),
     clear: async () => {
       store.clear();
     },

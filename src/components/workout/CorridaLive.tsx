@@ -1,9 +1,11 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { toast } from 'sonner';
+
 import { useTheme } from '@/contexts/ThemeContext';
 import { apiErrorMessage } from '@/lib/api';
-import { salvarExecucao } from '@/lib/api/execucao';
+import { salvarExecucaoOfflineFirst } from '@/lib/api/execucao';
 import { listAtividadesStrava, type AtividadeStrava } from '@/lib/api/strava';
 import { formatDate, relativeDay } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -69,7 +71,7 @@ export function CorridaLive({ treino, alunoId }: Props) {
     }
     setSubmitting(true);
     try {
-      await salvarExecucao(treino.id, {
+      const result = await salvarExecucaoOfflineFirst(treino.id, {
         realizado: {
           distanciaKm: Number(distanciaKm),
           duracaoSeg,
@@ -79,6 +81,9 @@ export function CorridaLive({ treino, alunoId }: Props) {
         },
         status: 'CONCLUIDO',
       });
+      if (result.kind === 'queued') {
+        toast.success('Treino salvo offline · sincronizamos quando voltar a rede');
+      }
       navigate('/aluno/dashboard?ok=1', { replace: true });
     } catch (err) {
       setError(apiErrorMessage(err));

@@ -24,3 +24,5 @@ Thumbs.db
 # tsc -b emite os configs em JS/d.ts dentro do source — não versionar
 vite.config.js
 vite.config.d.ts
+workbox-*.js
+workbox-*.js.map

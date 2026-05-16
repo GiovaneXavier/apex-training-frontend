@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { AlunoTabs } from '@/components/AlunoTabs';
 import { Button } from '@/components/ui/button';
@@ -33,8 +34,9 @@ export default function AlunoDashboard() {
   const [rotinas, setRotinas] = useState<Rotina[]>([]);
   const [strava, setStrava] = useState<StravaStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
+  // Feedbacks transientes (erros de sync, msgs de sucesso) agora via Sonner.
+  // `loadError` mantido só pra erro de carregamento da página (banner inline).
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [iniciandoId, setIniciandoId] = useState<string | null>(null);
 
@@ -48,7 +50,7 @@ export default function AlunoDashboard() {
   async function carregar() {
     if (!user?.aluno?.id) return;
     setLoading(true);
-    setError(null);
+    setLoadError(null);
     try {
       const [t, r, s] = await Promise.all([
         listTreinos(user.aluno.id, {
@@ -63,7 +65,8 @@ export default function AlunoDashboard() {
       setRotinas(r);
       if (s) setStrava(s);
     } catch (err) {
-      setError(apiErrorMessage(err));
+      // Erro de load INICIAL fica como banner inline — sem dados não há o que mostrar.
+      setLoadError(apiErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -120,26 +123,31 @@ export default function AlunoDashboard() {
 
   // ─── Ações ─────────────────────────────────────────────────
   async function onSync() {
-    setError(null);
-    setInfo(null);
     if (!strava?.connected) {
-      window.location.href = buildStravaAuthUrl();
+      try {
+        window.location.href = buildStravaAuthUrl();
+      } catch (err) {
+        console.error('[Strava] falha ao montar URL OAuth:', err);
+        toast.error(apiErrorMessage(err));
+      }
       return;
     }
     setSyncing(true);
     try {
       const r = await syncStrava();
-      setInfo(`${r.novas} ${r.novas === 1 ? 'nova atividade' : 'novas atividades'} sincronizadas`);
+      const msg = r.novas === 0
+        ? 'Nenhuma atividade nova'
+        : `${r.novas} ${r.novas === 1 ? 'nova atividade' : 'novas atividades'} sincronizadas`;
+      toast.success(msg);
       await carregar();
     } catch (err) {
-      setError(apiErrorMessage(err));
+      toast.error(apiErrorMessage(err));
     } finally {
       setSyncing(false);
     }
   }
 
   async function onIniciarRotina(rotina: Rotina) {
-    setError(null);
     setIniciandoId(rotina.id);
     try {
       const dataAlvo = new Date(diaSelecionado);
@@ -147,7 +155,7 @@ export default function AlunoDashboard() {
       const treino = await iniciarTreinoDeRotina(rotina.id, dataAlvo.toISOString());
       navigate(`/aluno/treino/${treino.id}`);
     } catch (err) {
-      setError(apiErrorMessage(err));
+      toast.error(apiErrorMessage(err));
     } finally {
       setIniciandoId(null);
     }
@@ -188,14 +196,10 @@ export default function AlunoDashboard() {
         </Button>
       </header>
 
-      {info && (
-        <div className="mx-5 mb-3 px-3 py-2 rounded-[10px] bg-success-bg text-success-ink text-[11.5px] font-medium">
-          {info}
-        </div>
-      )}
-      {error && (
+      {/* Erro de carregamento INICIAL fica inline — sem dados, toast some rápido demais. */}
+      {loadError && (
         <div className="mx-5 mb-3 px-3 py-2 rounded-[10px] bg-danger-bg text-danger text-[11.5px] font-medium">
-          {error}
+          {loadError}
         </div>
       )}
 
