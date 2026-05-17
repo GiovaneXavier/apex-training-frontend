@@ -33,7 +33,14 @@ export type ListRPsFilters = {
   limit?: number;
 };
 
-export async function listRPs(alunoId: string, filters: ListRPsFilters = {}): Promise<ListRPsResponse> {
-  const { data } = await api.get<ListRPsResponse>(`/rps/${alunoId}`, { params: filters });
+export async function listRPs(
+  alunoId: string,
+  filters: ListRPsFilters = {},
+  opts: { signal?: AbortSignal } = {},
+): Promise<ListRPsResponse> {
+  const { data } = await api.get<ListRPsResponse>(`/rps/${alunoId}`, {
+    params: filters,
+    signal: opts.signal,
+  });
   return data;
 }
