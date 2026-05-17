@@ -2,6 +2,57 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      PR #13 (audit 2.5 + 2.22) — Content Security Policy
+
+      Estratégia: allowlist explícita por diretiva. Tudo que NÃO está
+      listado vira `default-src 'self'`, ou seja, é bloqueado se vier
+      de fora do próprio domínio do app.
+
+      Hosts liberados:
+        - api.apex (connect-src): backend Render — sobrescreva via build
+          se mudar de host (host estático na meta; pra dinâmico, gere
+          este arquivo no build).
+        - S3 (img-src): bucket apex-training-assets em sa-east-1.
+        - Strava (img-src): avatares hospedados em cloudfront/dgalywyr
+          (família *.strava.com / *.cloudfront.net / *.strava-pictures.com).
+        - Google Fonts (style-src/font-src): estilos vêm do googleapis,
+          fontes binárias do gstatic.
+        - 'unsafe-inline' em style-src: Tailwind/CVA injeta classes
+          dinâmicas via JS, mas estilos vão pro CSS bundle externo.
+          Mantemos só por compatibilidade com Radix UI (Slot, Tabs) que
+          calcula style inline em alguns componentes.
+        - localhost: liberado pra dev (Vite HMR via ws + reload via http).
+          Em prod o navegador ignora porque o app não roda em localhost.
+
+      script-src 'self' bloqueia <script> com origem externa. SW e
+      Workbox são servidos da mesma origem (vite-plugin-pwa).
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'self';
+        script-src 'self';
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+        font-src 'self' https://fonts.gstatic.com;
+        img-src 'self' data: blob:
+          https://apex-training-assets.s3.sa-east-1.amazonaws.com
+          https://*.cloudfront.net
+          https://*.strava.com
+          https://*.strava-pictures.com;
+        connect-src 'self'
+          https://apex-training-backend.onrender.com
+          ws://localhost:* http://localhost:*;
+        manifest-src 'self';
+        worker-src 'self';
+        frame-ancestors 'none';
+        base-uri 'self';
+        form-action 'self';
+        object-src 'none';
+      "
+    />
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta name="referrer" content="no-referrer" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0a0a0b" />
