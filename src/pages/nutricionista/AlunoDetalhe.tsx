@@ -1,9 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { apiErrorMessage, isCancelError } from '@/lib/api';
 import { getAlunoDetalheNutri, type NutriAlunoDetalhe } from '@/lib/api/nutri';
 import { listEvolucoes, PROTOCOLO_LABEL, type Evolucao } from '@/lib/api/evolucoes';
+import {
+  createPlano,
+  getPlanoAtual,
+  type PlanoAlimentar,
+} from '@/lib/api/planos';
+import { uploadFoto } from '@/lib/upload';
 import { formatDate, relativeDay } from '@/lib/format';
 import { MODALIDADE_LABEL, type Treino } from '@/types/treino';
 
@@ -11,11 +18,13 @@ export default function NutriAlunoDetalhe() {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<NutriAlunoDetalhe | null>(null);
   const [evolucoes, setEvolucoes] = useState<Evolucao[]>([]);
+  const [plano, setPlano] = useState<PlanoAlimentar | null>(null);
   const [loadingEvolucoes, setLoadingEvolucoes] = useState(true);
+  const [loadingPlano, setLoadingPlano] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // PR #18a — fetch paralelo de detalhe + histórico de avaliações ISAK.
-  // AbortController no cleanup (padrão PR #15). Cancel é silencioso.
+  // PR #18a/b — fetch paralelo de 3 endpoints: detalhe + histórico ISAK
+  // + plano alimentar vigente. AbortController no cleanup (padrão PR #15).
   useEffect(() => {
     if (!id) return;
     const ctrl = new AbortController();
@@ -30,6 +39,12 @@ export default function NutriAlunoDetalhe() {
           (err) => { if (!isCancelError(err)) setError(apiErrorMessage(err)); },
         )
         .finally(() => { if (!ctrl.signal.aborted) setLoadingEvolucoes(false); }),
+      getPlanoAtual(id, { signal: ctrl.signal })
+        .then(
+          (p) => setPlano(p),
+          (err) => { if (!isCancelError(err)) setError(apiErrorMessage(err)); },
+        )
+        .finally(() => { if (!ctrl.signal.aborted) setLoadingPlano(false); }),
     ]);
     return () => ctrl.abort();
   }, [id]);
@@ -82,6 +97,16 @@ export default function NutriAlunoDetalhe() {
               avaliações está bloqueado até o aceite.
             </div>
           )}
+
+          {/* PR #18b — plano alimentar vigente + uploader. Gate de
+              escrita espelhando aceitoPeloAluno (mesma regra ISAK). */}
+          <PlanoAlimentarSection
+            alunoId={data.aluno.id}
+            plano={plano}
+            loading={loadingPlano}
+            podeEscrever={podeRegistrar}
+            onCreated={(p) => setPlano(p)}
+          />
 
           <Section
             title={
@@ -206,6 +231,160 @@ function Empty({ msg }: { msg: string }) {
   return (
     <div className="px-3 py-4 rounded-[12px] bg-surface border border-app text-ink-subtle text-[13px] text-center">
       {msg}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Plano Alimentar (PR #18b)
+//
+// Esta seção combina visualização do plano vigente + uploader inline.
+// Forma escolhida pela decisão de produto: PDF + texto livre de "foco".
+// Não temos planner estruturado — o nutri usa software dedicado
+// (WebDiet/Dietbox) que exporta PDF e cola aqui.
+//
+// O uploader segue o fluxo S3 Presign (PR #13): cliente valida MIME/size
+// localmente, pede presign ao backend, sobe direto no S3, persiste o
+// PlanoAlimentar com a URL pública. Concorrência: createPlano no backend
+// roda dentro de $transaction (desativa anteriores + cria ativo).
+// ─────────────────────────────────────────────────────────────────────
+function PlanoAlimentarSection({
+  alunoId, plano, loading, podeEscrever, onCreated,
+}: {
+  alunoId: string;
+  plano: PlanoAlimentar | null;
+  loading: boolean;
+  podeEscrever: boolean;
+  onCreated: (p: PlanoAlimentar) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [metasText, setMetasText] = useState(plano?.metasText ?? '');
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  // Pré-preenche o textarea quando o plano carregar ou trocar.
+  useEffect(() => {
+    setMetasText(plano?.metasText ?? '');
+  }, [plano?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function onSubmit() {
+    setLocalError(null);
+    const file = fileRef.current?.files?.[0];
+    if (!file) {
+      setLocalError('Selecione o PDF do plano alimentar.');
+      return;
+    }
+    setSubmitting(true);
+    setUploadProgress(0);
+    try {
+      // 1. upload S3 via presign (lib/upload já encaminha 'plano-alimentar')
+      const { url, key } = await uploadFoto(file, {
+        kind: 'plano-alimentar',
+        onProgress: (p) => setUploadProgress(p),
+      });
+      // 2. persiste o plano. Backend $transaction desativa anteriores.
+      const novo = await createPlano({
+        alunoId,
+        pdfUrl: url,
+        pdfKey: key,
+        metasText: metasText.trim() || undefined,
+      });
+      onCreated(novo);
+      if (fileRef.current) fileRef.current.value = '';
+      toast.success('Plano alimentar atualizado');
+    } catch (err) {
+      setLocalError(apiErrorMessage(err));
+    } finally {
+      setSubmitting(false);
+      setUploadProgress(null);
+    }
+  }
+
+  return (
+    <div className="mb-6">
+      <h2 className="text-[11px] uppercase tracking-[0.6px] text-ink-subtle font-bold mb-3 text-mono">
+        Plano alimentar
+      </h2>
+
+      {loading ? (
+        <div className="text-ink-subtle text-[12px] py-2">Carregando plano vigente…</div>
+      ) : plano ? (
+        <div className="px-3 py-3 rounded-[12px] bg-surface border border-app mb-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-mono text-[10px] uppercase tracking-[0.6px] font-bold text-ink-subtle">
+              Vigente desde {relativeDay(plano.criadoEm)}
+            </div>
+            <a
+              href={plano.pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] uppercase tracking-wider font-bold text-accent"
+            >
+              Baixar PDF ↗
+            </a>
+          </div>
+          {plano.metasText && (
+            <div className="text-[13px] text-ink whitespace-pre-wrap">{plano.metasText}</div>
+          )}
+        </div>
+      ) : (
+        <Empty msg="Nenhum plano alimentar registrado ainda." />
+      )}
+
+      {podeEscrever && (
+        <details className="mt-2 rounded-[12px] bg-surface border border-app">
+          <summary className="px-3 py-2.5 text-[12px] font-bold uppercase tracking-wider text-accent cursor-pointer">
+            {plano ? '+ Substituir plano' : '+ Subir primeiro plano'}
+          </summary>
+          <div className="px-3 pb-3">
+            <label className="block text-[10px] uppercase tracking-[0.6px] font-bold text-ink-subtle text-mono mb-1.5 mt-2">
+              PDF do plano (até 15 MB)
+            </label>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/pdf"
+              className="block w-full text-[12px] text-ink-muted mb-3"
+              disabled={submitting}
+            />
+
+            <label className="block text-[10px] uppercase tracking-[0.6px] font-bold text-ink-subtle text-mono mb-1.5">
+              Foco / metas (opcional, até 2000 caracteres)
+            </label>
+            <textarea
+              value={metasText}
+              onChange={(e) => setMetasText(e.target.value)}
+              maxLength={2000}
+              rows={4}
+              placeholder="Ex: Hipertrofia · 3 refeições + 2 lanches · evitar lactose"
+              className="w-full px-3 py-2 rounded-[10px] bg-bg border border-app-strong text-ink text-[13px] mb-2"
+              disabled={submitting}
+            />
+
+            {localError && (
+              <div className="px-3 py-2 mb-2 rounded-[10px] bg-danger-bg text-danger text-[12px] font-medium">
+                {localError}
+              </div>
+            )}
+
+            {uploadProgress !== null && uploadProgress < 100 && (
+              <div className="text-[11px] text-ink-subtle font-mono mb-2">
+                Enviando… {uploadProgress}%
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={submitting}
+              className="w-full h-11 rounded-[12px] bg-accent text-accent-ink font-bold text-[13px] disabled:opacity-50"
+            >
+              {submitting ? 'Enviando…' : plano ? 'Substituir plano' : 'Salvar plano'}
+            </button>
+          </div>
+        </details>
+      )}
     </div>
   );
 }
