@@ -55,6 +55,14 @@ export async function deleteTreino(treinoId: string): Promise<void> {
   await api.delete(`/treinos/${treinoId}`);
 }
 
+// PR #16 — clonar treino prescrito (reaproveitamento de carga).
+// Backend zera o `realizado` no detalhes e grava como PENDENTE numa
+// `dataAlvo` nova. Aceita janela [-90d, +180d].
+export async function clonarTreino(treinoId: string, dataAlvo: string): Promise<Treino> {
+  const { data } = await api.post<{ treino: Treino }>(`/treinos/${treinoId}/clonar`, { dataAlvo });
+  return data.treino;
+}
+
 export type HistoricoCarga = {
   kg: number | null;
   reps: number | null;
