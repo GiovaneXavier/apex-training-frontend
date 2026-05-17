@@ -88,8 +88,14 @@ export type EvolucaoInput = {
   observacoes?: string;
 };
 
-export async function listEvolucoes(filters: { alunoId?: string; desde?: string; ate?: string; limit?: number } = {}): Promise<Evolucao[]> {
-  const { data } = await api.get<Evolucao[]>('/evolucoes', { params: filters });
+export async function listEvolucoes(
+  filters: { alunoId?: string; desde?: string; ate?: string; limit?: number } = {},
+  opts: { signal?: AbortSignal } = {},
+): Promise<Evolucao[]> {
+  const { data } = await api.get<Evolucao[]>('/evolucoes', {
+    params: filters,
+    signal: opts.signal,
+  });
   return data;
 }
 
