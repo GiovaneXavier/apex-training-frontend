@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Field } from '@/components/auth/Field';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,7 +18,15 @@ import { cn } from '@/lib/utils';
 type Modo = 'ALUNO' | 'ISAK';
 
 export default function AlunoEvolucaoNova() {
-  const [modo, setModo] = useState<Modo | null>(null);
+  const { user } = useAuth();
+  // PR #18a — quando vier `?alunoId=…` (nutri/prof linkam pra avaliar
+  // um aluno específico), pulamos a tela de seleção e abrimos direto
+  // o form ISAK. O alunoId é repassado via prop pro FormISAK.
+  const [params] = useSearchParams();
+  const alunoIdParam = params.get('alunoId') ?? '';
+  const ehProfissional = user?.role === 'NUTRICIONISTA' || user?.role === 'PROFESSOR';
+  const modoInicial: Modo | null = alunoIdParam && ehProfissional ? 'ISAK' : null;
+  const [modo, setModo] = useState<Modo | null>(modoInicial);
 
   return (
     <div className="min-h-screen bg-bg text-ink pb-24">
@@ -34,7 +42,10 @@ export default function AlunoEvolucaoNova() {
         ) : modo === 'ALUNO' ? (
           <FormAluno onCancel={() => setModo(null)} />
         ) : (
-          <FormISAK onCancel={() => setModo(null)} />
+          <FormISAK
+            onCancel={() => setModo(null)}
+            alunoIdInicial={alunoIdParam || undefined}
+          />
         )}
       </div>
     </div>
@@ -212,12 +223,22 @@ function FormAluno({ onCancel }: { onCancel: () => void }) {
 // ─────────────────────────────────────────────────────────────
 // Form 2: ISAK Profissional
 // ─────────────────────────────────────────────────────────────
-function FormISAK({ onCancel }: { onCancel: () => void }) {
+function FormISAK({
+  onCancel,
+  alunoIdInicial,
+}: {
+  onCancel: () => void;
+  alunoIdInicial?: string;
+}) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const ehProfissional = user?.role === 'NUTRICIONISTA' || user?.role === 'PROFESSOR';
 
-  const [alunoId, setAlunoId] = useState<string>('');
+  // PR #18a — pré-preenche o aluno quando viemos pelo deep-link do
+  // detalhe (nutri/prof clicou em "+ Avaliação"). Quando preenchido,
+  // o campo abaixo fica readOnly pra evitar mudança acidental — pra
+  // mudar de aluno o profissional volta e abre outra ficha.
+  const [alunoId, setAlunoId] = useState<string>(alunoIdInicial ?? '');
   const [pesoKg, setPesoKg] = useState('');
   const [alturaCm, setAlturaCm] = useState('');
   const [sexoBio, setSexoBio] = useState<'M' | 'F'>('M');
@@ -316,7 +337,14 @@ function FormISAK({ onCancel }: { onCancel: () => void }) {
 
       <form onSubmit={onSubmit}>
         {ehProfissional && (
-          <Field label="ID do aluno" placeholder="cuid do aluno" value={alunoId} onChange={(e) => setAlunoId(e.target.value)} required />
+          <Field
+            label="ID do aluno"
+            placeholder="cuid do aluno"
+            value={alunoId}
+            onChange={(e) => setAlunoId(e.target.value)}
+            readOnly={Boolean(alunoIdInicial)}
+            required
+          />
         )}
 
         <SectionTitle>Identificação</SectionTitle>
