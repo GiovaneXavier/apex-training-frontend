@@ -14,6 +14,7 @@ import {
   type VinculoNutricionistaItem,
   type VinculoProfessorItem,
 } from '@/lib/api/alunoVinculos';
+import { getPlanoAtual, type PlanoAlimentar } from '@/lib/api/planos';
 import {
   buildStravaAuthUrl,
   disconnectStrava,
@@ -33,12 +34,17 @@ export default function AlunoPerfil() {
   const [nutris, setNutris] = useState<VinculoNutricionistaItem[]>([]);
   const [profs, setProfs] = useState<VinculoProfessorItem[]>([]);
   const [strava, setStrava] = useState<StravaStatus | null>(null);
+  const [planoAlimentar, setPlanoAlimentar] = useState<PlanoAlimentar | null>(null);
   const [atividades, setAtividades] = useState<AtividadeStrava[]>([]);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [busy, setBusy] = useState<'idle' | 'sync' | 'disconnect'>('idle');
 
   async function refresh() {
     try {
+      const alunoId = user?.aluno?.id;
+      // PR #18b — plano alimentar via getPlanoAtual quando há alunoId.
+      // Fora do Promise.all principal pra falha de plano não derrubar os
+      // outros (uso de .catch local — plano é opcional).
       const [n, p, s] = await Promise.all([
         listMinhasNutris(),
         listMeusProfessores(),
@@ -47,11 +53,14 @@ export default function AlunoPerfil() {
       setNutris(n);
       setProfs(p);
       setStrava(s);
-      if (s.connected && user?.aluno?.id) {
-        const ats = await listAtividadesStrava(user.aluno.id, 10);
+      if (s.connected && alunoId) {
+        const ats = await listAtividadesStrava(alunoId, 10);
         setAtividades(ats);
       } else {
         setAtividades([]);
+      }
+      if (alunoId) {
+        getPlanoAtual(alunoId).then(setPlanoAlimentar).catch(() => setPlanoAlimentar(null));
       }
     } catch (err) {
       toast.error(apiErrorMessage(err));
@@ -152,6 +161,31 @@ export default function AlunoPerfil() {
             <div className="text-[12px] text-ink-muted">{user?.email}</div>
           </div>
         </div>
+
+        {/* PR #18b — plano alimentar vigente. Card discreto: aparece
+            só quando há plano ativo. Ausência intencional de empty
+            state pra não criar ansiedade no aluno que ainda não tem
+            nutri vinculado. */}
+        {planoAlimentar && (
+          <div className="mb-6 p-4 rounded-[14px] bg-accent text-accent-ink">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="text-[10px] uppercase tracking-[0.6px] font-bold text-mono opacity-80">
+                Plano alimentar · {relativeDay(planoAlimentar.criadoEm)}
+              </div>
+              <a
+                href={planoAlimentar.pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] uppercase tracking-wider font-bold"
+              >
+                Baixar PDF ↗
+              </a>
+            </div>
+            {planoAlimentar.metasText && (
+              <div className="text-[13px] whitespace-pre-wrap">{planoAlimentar.metasText}</div>
+            )}
+          </div>
+        )}
 
         <Section title="Nutricionistas" subtitle="Aceite o convite para compartilhar sua rotina.">
           {nutris.length === 0 ? (
