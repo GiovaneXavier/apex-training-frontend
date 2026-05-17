@@ -36,3 +36,33 @@ export async function getDesempenho(alunoId?: string): Promise<Desempenho> {
   const { data } = await api.get<Desempenho>(path);
   return data;
 }
+
+// PR #20 — Matriz de Volume Semanal.
+//
+// Cada item da série representa UMA semana civil (segunda ISO).
+// Unidades: km pra corrida/ciclismo, METROS pra natação (piscina),
+// kg de tonelagem pra musculação. UI traduz o eixo Y conforme o modo.
+export type VolumeSemana = {
+  semana: string;       // YYYY-MM-DD (segunda ISO)
+  corridaKm: number;
+  ciclismoKm: number;
+  natacaoM: number;
+  musculacaoKg: number;
+};
+
+export type VolumeSeries = {
+  weeks: number;
+  series: VolumeSemana[];
+};
+
+export async function getVolumeSeries(
+  alunoId?: string,
+  opts: { weeks?: number; signal?: AbortSignal } = {},
+): Promise<VolumeSeries> {
+  const path = alunoId ? `/aluno/${alunoId}/volume` : '/aluno/volume';
+  const { data } = await api.get<VolumeSeries>(path, {
+    params: opts.weeks ? { weeks: opts.weeks } : undefined,
+    signal: opts.signal,
+  });
+  return data;
+}

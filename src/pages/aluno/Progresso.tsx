@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { apiErrorMessage } from '@/lib/api';
 import { listEvolucoes, type Evolucao } from '@/lib/api/evolucoes';
 import { getDesempenho, type Desempenho, type EstimativaProva } from '@/lib/api/desempenho';
+import { GraficoVolume } from '@/components/aluno/GraficoVolume';
 import { cn } from '@/lib/utils';
 
 // ─────────────────────────────────────────────────────────────
@@ -115,6 +116,11 @@ function SecaoDesempenho({
   return (
     <div className="flex flex-col gap-3">
       <CardStreak semanas={data.streak} />
+      {/* PR #20 — Matriz de Volume Semanal. Posicionado logo após o
+          streak por dar continuidade visual: streak = consistência,
+          volume = magnitude. Cada modalidade num tab pra escala Y
+          limpa. */}
+      <GraficoVolume />
       <CardCiclo ciclo={data.ciclo} />
       <CardEstimativas estimativas={data.estimativasProva} />
       <CardResumoMes resumo={data.resumoMes} />
