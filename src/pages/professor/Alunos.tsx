@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { Field } from '@/components/auth/Field';
 import { apiErrorMessage } from '@/lib/api';
@@ -27,7 +28,10 @@ export default function ProfAlunos() {
     setError(null);
     setSubmitting(true);
     try {
-      await vincularPorEmail(email.trim());
+      // PR #14 — backend retorna mensagem genérica (anti-enumeration).
+      // O refresh abaixo é quem mostra se o aluno realmente foi vinculado.
+      const result = await vincularPorEmail(email.trim());
+      toast.info(result.message);
       setEmail('');
       await refresh();
     } catch (err) {

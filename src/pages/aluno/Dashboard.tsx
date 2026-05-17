@@ -4,7 +4,8 @@ import { toast } from 'sonner';
 
 import { AlunoTabs } from '@/components/AlunoTabs';
 import { Button } from '@/components/ui/button';
-import { WeeklyTimeline, inicioSemana, key as dayKey } from '@/components/aluno/WeeklyTimeline';
+import { WeeklyTimeline } from '@/components/aluno/WeeklyTimeline';
+import { inicioSemana, key as dayKey, comHoraAtual } from '@/lib/dates';
 import { WorkoutDayCard, RestDayCard } from '@/components/aluno/WorkoutDayCard';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiErrorMessage } from '@/lib/api';
@@ -150,8 +151,10 @@ export default function AlunoDashboard() {
   async function onIniciarRotina(rotina: Rotina) {
     setIniciandoId(rotina.id);
     try {
-      const dataAlvo = new Date(diaSelecionado);
-      dataAlvo.setHours(7, 0, 0, 0);
+      // PR #14 — hora real do dispositivo, não 7AM hardcoded. Mantém a
+      // DATA selecionada (atleta pode estar revisando ontem ou pré-
+      // agendando amanhã) mas grava a hora atual. Backend valida janela.
+      const dataAlvo = comHoraAtual(diaSelecionado);
       const treino = await iniciarTreinoDeRotina(rotina.id, dataAlvo.toISOString());
       navigate(`/aluno/treino/${treino.id}`);
     } catch (err) {

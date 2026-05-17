@@ -8,6 +8,7 @@ import { apiErrorMessage } from '@/lib/api';
 import { listProvas } from '@/lib/api/provas';
 import { listTreinos } from '@/lib/api/treinos';
 import { iniciarTreinoDeRotina, listRotinas, type DiaSemana, type Rotina } from '@/lib/api/rotinas';
+import { comHoraAtual } from '@/lib/dates';
 import { cn } from '@/lib/utils';
 import { MODALIDADE_LABEL, type Prova, type Treino } from '@/types/treino';
 import { useNavigate } from 'react-router-dom';
@@ -88,7 +89,10 @@ export default function AlunoCalendario() {
   async function onIniciarRotina(rotinaId: string, dataKey: string) {
     setError(null);
     try {
-      const dataAlvo = new Date(dataKey + 'T07:00:00').toISOString();
+      // PR #14 — hora atual do dispositivo, não 7AM hardcoded. Combina
+      // a DATA clicada com a hora real. Backend valida janela [-7d, +5min].
+      const diaBase = new Date(dataKey + 'T00:00:00');
+      const dataAlvo = comHoraAtual(diaBase).toISOString();
       const treino = await iniciarTreinoDeRotina(rotinaId, dataAlvo);
       navigate(`/aluno/treino/${treino.id}`);
     } catch (err) {
