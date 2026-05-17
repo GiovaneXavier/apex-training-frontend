@@ -11,11 +11,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { apiErrorMessage, isCancelError } from '@/lib/api';
 import { listTreinos } from '@/lib/api/treinos';
 import { iniciarTreinoDeRotina, listRotinas, type DiaSemana, type Rotina } from '@/lib/api/rotinas';
+import { listProvas } from '@/lib/api/provas';
+import { ProximaProvaWidget } from '@/components/aluno/ProximaProvaWidget';
 import {
   buildStravaAuthUrl, getStravaStatus, syncStrava,
   type StravaStatus,
 } from '@/lib/api/strava';
-import type { Treino } from '@/types/treino';
+import type { Treino, Prova } from '@/types/treino';
 
 const DIA_SEMANA_INDEX: Record<DiaSemana, number> = {
   DOM: 0, SEG: 1, TER: 2, QUA: 3, QUI: 4, SEX: 5, SAB: 6,
@@ -34,6 +36,9 @@ export default function AlunoDashboard() {
   const [treinos, setTreinos] = useState<Treino[]>([]);
   const [rotinas, setRotinas] = useState<Rotina[]>([]);
   const [strava, setStrava] = useState<StravaStatus | null>(null);
+  // PR #21 — próxima prova alvo (countdown). Fetch fora do Promise.all
+  // principal pra falha de prova não derrubar treinos/rotinas.
+  const [proximaProva, setProximaProva] = useState<Prova | null>(null);
   const [loading, setLoading] = useState(true);
   // Feedbacks transientes (erros de sync, msgs de sucesso) agora via Sonner.
   // `loadError` mantido só pra erro de carregamento da página (banner inline).
@@ -77,6 +82,17 @@ export default function AlunoDashboard() {
       setTreinos(t);
       setRotinas(r);
       if (s) setStrava(s);
+
+      // PR #21 — próxima prova alvo. Fetch isolado pra não bloquear
+      // o resto se /provas falhar; provas é feature secundária.
+      // `desde=agora` filtra só provas futuras; `limit=1` é suficiente
+      // pro widget (próxima é o que importa).
+      const agora = new Date().toISOString();
+      listProvas(user.aluno.id, { desde: agora, limit: 1 })
+        .then((provas) => setProximaProva(provas[0] ?? null))
+        .catch(() => {
+          // silencioso — widget mostra estado vazio
+        });
     } catch (err) {
       // Erro de cancel não é falha real — usuário trocou de tela.
       if (isCancelError(err)) return;
@@ -228,6 +244,15 @@ export default function AlunoDashboard() {
           {loadError}
         </div>
       )}
+
+      {/* PR #21 — countdown da prova alvo. Posicionado imediatamente
+          após o header pra ser o primeiro elemento visual abaixo do
+          nome. Sem alvo cadastrado, mostra CTA discreto. */}
+      <ProximaProvaWidget
+        prova={proximaProva}
+        onCriada={(p) => setProximaProva(p)}
+      />
+
 
       {/* ── Navegação de semana ─────────────────────────────────── */}
       <div className="px-5 flex items-center justify-between mb-1">
