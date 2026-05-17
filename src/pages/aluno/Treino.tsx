@@ -1,13 +1,38 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 
 import { WorkoutScreen } from '@/components/workout/WorkoutScreen';
 import { WorkoutLive } from '@/components/workout/WorkoutLive';
-import { CorridaLive } from '@/components/workout/CorridaLive';
-import { CiclismoLive } from '@/components/workout/CiclismoLive';
-import { NatacaoLive } from '@/components/workout/NatacaoLive';
-import { HyroxLive } from '@/components/workout/HyroxLive';
 import { PhoneFrame } from '@/components/workout/PhoneFrame';
+
+// PR #15 (audit 5.16) — lazy load por modalidade. Cada Live carrega
+// dependências pesadas (Strava client em CorridaLive, matemática de
+// CSS em NatacaoLive, cronômetros em HyroxLive). Sem split, todos
+// caem no chunk de Treino — atleta que abriu pra fazer musculação
+// pagava o byte das outras 4 modalidades.
+const CorridaLive = lazy(() =>
+  import('@/components/workout/CorridaLive').then((m) => ({ default: m.CorridaLive })),
+);
+const CiclismoLive = lazy(() =>
+  import('@/components/workout/CiclismoLive').then((m) => ({ default: m.CiclismoLive })),
+);
+const NatacaoLive = lazy(() =>
+  import('@/components/workout/NatacaoLive').then((m) => ({ default: m.NatacaoLive })),
+);
+const HyroxLive = lazy(() =>
+  import('@/components/workout/HyroxLive').then((m) => ({ default: m.HyroxLive })),
+);
+
+// Fallback inline — placeholder magro pra evitar criar chunk extra.
+// Tempo real de carga em 4G geralmente fica abaixo de 500ms (Live
+// components têm 30-80KB cada).
+function LiveFallback() {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="h-5 w-5 animate-spin rounded-full border-2 border-ink-muted/30 border-t-coral" />
+    </div>
+  );
+}
 import { ReagendarButton } from '@/components/ReagendarButton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -127,7 +152,9 @@ export default function AlunoTreino() {
             onReagendado={(iso) => setTreino({ ...treino, dataAlvo: iso })}
           />
         )}
-        <CorridaLive treino={treino} alunoId={alunoIdAtual} />
+        <Suspense fallback={<LiveFallback />}>
+          <CorridaLive treino={treino} alunoId={alunoIdAtual} />
+        </Suspense>
       </>
     );
   }
@@ -143,7 +170,9 @@ export default function AlunoTreino() {
             onReagendado={(iso) => setTreino({ ...treino, dataAlvo: iso })}
           />
         )}
-        <CiclismoLive treino={treino} />
+        <Suspense fallback={<LiveFallback />}>
+          <CiclismoLive treino={treino} />
+        </Suspense>
       </>
     );
   }
@@ -159,7 +188,9 @@ export default function AlunoTreino() {
             onReagendado={(iso) => setTreino({ ...treino, dataAlvo: iso })}
           />
         )}
-        <NatacaoLive treino={treino} />
+        <Suspense fallback={<LiveFallback />}>
+          <NatacaoLive treino={treino} />
+        </Suspense>
       </>
     );
   }
@@ -175,7 +206,9 @@ export default function AlunoTreino() {
             onReagendado={(iso) => setTreino({ ...treino, dataAlvo: iso })}
           />
         )}
-        <HyroxLive treino={treino} />
+        <Suspense fallback={<LiveFallback />}>
+          <HyroxLive treino={treino} />
+        </Suspense>
       </>
     );
   }

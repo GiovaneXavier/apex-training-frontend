@@ -26,8 +26,8 @@ export type SyncResult = {
   sincronizadoEm: string;
 };
 
-export async function getStravaStatus(): Promise<StravaStatus> {
-  const { data } = await api.get<StravaStatus>('/strava/status');
+export async function getStravaStatus(opts: { signal?: AbortSignal } = {}): Promise<StravaStatus> {
+  const { data } = await api.get<StravaStatus>('/strava/status', { signal: opts.signal });
   return data;
 }
 

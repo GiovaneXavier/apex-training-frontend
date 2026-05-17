@@ -13,13 +13,28 @@ export type ListTreinosFilters = {
   limit?: number;
 };
 
-export async function listTreinos(alunoId: string, filters: ListTreinosFilters = {}): Promise<Treino[]> {
-  const { data } = await api.get<{ treinos: Treino[] }>(`/treinos/${alunoId}`, { params: filters });
+// PR #15 (audit 5.17) — `signal` opcional propaga AbortController de
+// dentro de um useEffect. Trocar de rota cancela fetches pendentes,
+// poupa banda do celular e load do backend.
+export async function listTreinos(
+  alunoId: string,
+  filters: ListTreinosFilters = {},
+  opts: { signal?: AbortSignal } = {},
+): Promise<Treino[]> {
+  const { data } = await api.get<{ treinos: Treino[] }>(`/treinos/${alunoId}`, {
+    params: filters,
+    signal: opts.signal,
+  });
   return data.treinos;
 }
 
-export async function getTreino(treinoId: string): Promise<Treino> {
-  const { data } = await api.get<{ treino: Treino }>(`/treinos/detalhe/${treinoId}`);
+export async function getTreino(
+  treinoId: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<Treino> {
+  const { data } = await api.get<{ treino: Treino }>(`/treinos/detalhe/${treinoId}`, {
+    signal: opts.signal,
+  });
   return data.treino;
 }
 

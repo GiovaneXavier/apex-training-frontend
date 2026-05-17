@@ -71,8 +71,11 @@ export type RotinaCreateInput = {
   exercicios: RotinaInputExercicio[];
 };
 
-export async function listRotinas(filters: { alunoId?: string; diaSemana?: DiaSemana; ativasEm?: string } = {}): Promise<Rotina[]> {
-  const { data } = await api.get<Rotina[]>('/rotinas', { params: filters });
+export async function listRotinas(
+  filters: { alunoId?: string; diaSemana?: DiaSemana; ativasEm?: string } = {},
+  opts: { signal?: AbortSignal } = {},
+): Promise<Rotina[]> {
+  const { data } = await api.get<Rotina[]>('/rotinas', { params: filters, signal: opts.signal });
   return data;
 }
 
