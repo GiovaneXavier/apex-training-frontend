@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { apiErrorMessage } from '@/lib/api';
 import { getAlunoDetalhe, type AlunoDetalhe } from '@/lib/api/professor';
 import { deleteRotina, listRotinas, DIA_SEMANA_LABEL, type Rotina } from '@/lib/api/rotinas';
+import { clonarTreino } from '@/lib/api/treinos';
 import { formatDate, relativeDay } from '@/lib/format';
 import { MODALIDADE_LABEL, type Treino } from '@/types/treino';
 
@@ -12,6 +14,46 @@ export default function ProfAlunoDetalhe() {
   const [data, setData] = useState<AlunoDetalhe | null>(null);
   const [rotinas, setRotinas] = useState<Rotina[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [cloningId, setCloningId] = useState<string | null>(null);
+
+  async function reloadAluno() {
+    if (!id) return;
+    try {
+      const d = await getAlunoDetalhe(id);
+      setData(d);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    }
+  }
+
+  // PR #16 — clona um treino prescrito para +N dias da dataAlvo original.
+  // UX simples: prompt pra escolher dias de offset (default +7). Botão
+  // desabilitado durante o POST. Sucesso → toast + recarrega a lista.
+  async function onClonar(t: Treino) {
+    const diasStr = prompt(
+      `Clonar "${t.titulo}" para quantos dias à frente?`,
+      '7',
+    );
+    if (diasStr === null) return; // cancelado
+    const dias = Number(diasStr);
+    if (!Number.isFinite(dias) || dias === 0) {
+      toast.error('Informe um número de dias diferente de zero.');
+      return;
+    }
+    const dataAlvo = new Date(t.dataAlvo);
+    dataAlvo.setDate(dataAlvo.getDate() + dias);
+
+    setCloningId(t.id);
+    try {
+      const novo = await clonarTreino(t.id, dataAlvo.toISOString());
+      toast.success(`Clonado para ${relativeDay(novo.dataAlvo)}`);
+      await reloadAluno();
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    } finally {
+      setCloningId(null);
+    }
+  }
 
   async function loadRotinas() {
     if (!id) return;
@@ -133,7 +175,12 @@ export default function ProfAlunoDetalhe() {
             {data.treinosPendentes.length === 0 ? (
               <Empty msg="Nenhum treino pendente" />
             ) : (
-              <List items={data.treinosPendentes} variant="pending" />
+              <List
+                items={data.treinosPendentes}
+                variant="pending"
+                onClonar={onClonar}
+                cloningId={cloningId}
+              />
             )}
           </Section>
 
@@ -141,7 +188,12 @@ export default function ProfAlunoDetalhe() {
             {data.treinosConcluidos.length === 0 ? (
               <Empty msg="Sem registros recentes" />
             ) : (
-              <List items={data.treinosConcluidos} variant="done" />
+              <List
+                items={data.treinosConcluidos}
+                variant="done"
+                onClonar={onClonar}
+                cloningId={cloningId}
+              />
             )}
           </Section>
 
@@ -191,7 +243,14 @@ function Empty({ msg }: { msg: string }) {
   );
 }
 
-function List({ items, variant }: { items: Treino[]; variant: 'pending' | 'done' }) {
+function List({
+  items, variant, onClonar, cloningId,
+}: {
+  items: Treino[];
+  variant: 'pending' | 'done';
+  onClonar: (t: Treino) => void;
+  cloningId: string | null;
+}) {
   return (
     <div className="flex flex-col gap-2">
       {items.map((t) => (
@@ -207,6 +266,16 @@ function List({ items, variant }: { items: Treino[]; variant: 'pending' | 'done'
             </div>
             <div className="text-[13.5px] font-semibold truncate">{t.titulo}</div>
           </div>
+          {/* PR #16 — clonar treino. Reaproveita carga prescrita (e
+              prescrição completa) numa nova dataAlvo. */}
+          <button
+            type="button"
+            onClick={() => onClonar(t)}
+            disabled={cloningId === t.id}
+            className="text-[10px] uppercase tracking-wider font-bold text-accent ml-2 flex-shrink-0 disabled:opacity-40"
+          >
+            {cloningId === t.id ? '…' : 'clonar'}
+          </button>
         </div>
       ))}
     </div>

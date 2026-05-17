@@ -49,8 +49,39 @@ api.interceptors.response.use(
   },
 );
 
+// PR #15 — sentinel para callers ignorarem erros de cancelamento.
+// `useEffect` cleanup que aborta uma chamada NÃO é falha real, é UX
+// (usuário trocou de tela). Componentes podem checar `isCancelError(err)`
+// e simplesmente retornar sem renderizar erro.
+export function isCancelError(err: unknown): boolean {
+  return axios.isCancel(err) ||
+    (axios.isAxiosError(err) && err.code === 'ERR_CANCELED') ||
+    (err instanceof DOMException && err.name === 'AbortError');
+}
+
 export function apiErrorMessage(err: unknown): string {
+  // PR #15 — cancelamento via AbortController não é erro do usuário.
+  // Devolve string vazia pra render condicional não mostrar nada.
+  // Idealmente o caller verifica isCancelError antes; mantemos defesa.
+  if (isCancelError(err)) return '';
+
   if (axios.isAxiosError(err)) {
+    // PR #15 (audit 5.18) — diferenciação clara de falhas de rede.
+    //
+    // ERR_NETWORK: navegador NÃO recebeu resposta (offline, DNS, CORS
+    // pre-flight bloqueado, server down). Antes virava 'Network Error'
+    // ou caía no genérico — usuário olhava o app e culpava bug.
+    //
+    // ECONNABORTED: timeout (config.timeout estourou). Diferente de
+    // offline — server pode estar lento mas online. Mensagem distinta
+    // ajuda diagnóstico via support.
+    if (err.code === 'ERR_NETWORK') {
+      return 'Sem conexão com a internet. Verifique sua rede e tente de novo.';
+    }
+    if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT') {
+      return 'A conexão demorou demais. Tente novamente em instantes.';
+    }
+
     const data = err.response?.data as
       | { message?: string; error?: string; issues?: { message: string }[] }
       | undefined;

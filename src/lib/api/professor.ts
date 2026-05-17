@@ -55,9 +55,15 @@ export async function listAlunos(): Promise<AlunoVinculado[]> {
   return data.alunos;
 }
 
-export async function vincularPorEmail(email: string): Promise<AlunoVinculado> {
-  const { data } = await api.post<{ aluno: AlunoVinculado }>('/professor/vincular', { email });
-  return data.aluno;
+// PR #14 (audit 2.21) — resposta genérica anti-enumeration. O backend
+// não retorna mais o aluno vinculado; a UI deve recarregar a listagem
+// pra confirmar. Mensagem default cobre o caso de uso (sucesso ou
+// "email não pertence a um aluno cadastrado").
+export type VincularResultado = { ok: boolean; message: string };
+
+export async function vincularPorEmail(email: string): Promise<VincularResultado> {
+  const { data } = await api.post<VincularResultado>('/professor/vincular', { email });
+  return data;
 }
 
 export async function desvincular(vinculoId: string): Promise<void> {

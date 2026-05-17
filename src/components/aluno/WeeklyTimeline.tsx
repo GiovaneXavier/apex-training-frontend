@@ -1,5 +1,6 @@
 import { useMemo, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { inicioSemana, key } from '@/lib/dates';
 
 const DIAS_CURTO = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
 
@@ -132,20 +133,7 @@ export function WeeklyTimeline({
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
-export function inicioSemana(d: Date): Date {
-  const date = new Date(d);
-  date.setHours(0, 0, 0, 0);
-  // Padrão BR: semana começa na segunda
-  const dow = date.getDay();
-  const diffParaSegunda = (dow + 6) % 7;
-  date.setDate(date.getDate() - diffParaSegunda);
-  return date;
-}
-
-export function key(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-export function mesmaData(a: Date, b: Date): boolean {
-  return key(a) === key(b);
-}
+// Re-exports de lib/dates (PR #14). Implementações moveram para lá pra
+// alinhar com o backend e eliminar duplicação. Mantidos aqui como
+// re-export para não quebrar imports existentes do Dashboard.
+export { inicioSemana, key, mesmaData } from '@/lib/dates';

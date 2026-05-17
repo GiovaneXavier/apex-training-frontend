@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { Field } from '@/components/auth/Field';
@@ -11,11 +12,59 @@ import {
   getRotina,
   updateRotina,
   type DiaSemana,
-  type RotinaInputExercicio,
 } from '@/lib/api/rotinas';
 import { cn } from '@/lib/utils';
 
-type ExercicioPrescrito = RotinaInputExercicio & { exercicio: Exercicio };
+// PR #16 — refatorado com react-hook-form + useFieldArray.
+//
+// Por que RHF aqui:
+//   - useFieldArray é o padrão pra listas com prepend/append/move/remove
+//     onde cada item tem subform — substitui o `setExerciciosSel.map`
+//     manual que tínhamos antes (e estava prestes a virar n^2 com
+//     validação por campo).
+//   - register vs Controller: register para inputs HTML nativos (texto,
+//     date, número), Controller pros casos custom (a fita de DIAS, que
+//     é grupo de botões).
+//   - watch() segue reativo para os indicadores derivados (aviso 3m,
+//     contagem de exercícios) sem dispatch manual.
+//
+// Cada exercício carrega um snapshot do catálogo (`exercicio.nome`,
+// equipamento) que NÃO viaja no payload — strip no submit.
+
+type ExercicioFormItem = {
+  exercicioId: string;
+  ordem: number;
+  series: number;
+  reps?: number;
+  cargaPctRP?: number;
+  cargaKg?: number;
+  descansoSeg?: number;
+  observacao?: string;
+  // Snapshot pra exibição. NÃO vai pro backend.
+  _nome: string;
+};
+
+type FormValues = {
+  alunoId: string;
+  nome: string;
+  diaSemana: DiaSemana;
+  vigenciaInicio: string; // YYYY-MM-DD (input type=date)
+  vigenciaFim: string;    // YYYY-MM-DD ou ''
+  exercicios: ExercicioFormItem[];
+};
+
+function defaultValues(): FormValues {
+  const fim = new Date();
+  fim.setMonth(fim.getMonth() + 3);
+  return {
+    alunoId: '',
+    nome: '',
+    diaSemana: 'SEG',
+    vigenciaInicio: new Date().toISOString().slice(0, 10),
+    vigenciaFim: fim.toISOString().slice(0, 10),
+    exercicios: [],
+  };
+}
 
 export default function ProfRotinaForm() {
   const navigate = useNavigate();
@@ -25,53 +74,31 @@ export default function ProfRotinaForm() {
 
   const [alunos, setAlunos] = useState<AlunoVinculado[]>([]);
   const [catalogo, setCatalogo] = useState<Exercicio[]>([]);
-
-  const [alunoId, setAlunoId] = useState<string>(params.get('alunoId') ?? '');
-  const [nome, setNome] = useState('');
-  const [diaSemana, setDiaSemana] = useState<DiaSemana>('SEG');
-  const [vigenciaInicio, setVigenciaInicio] = useState(() => new Date().toISOString().slice(0, 10));
-  const [vigenciaFim, setVigenciaFim] = useState(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() + 3);
-    return d.toISOString().slice(0, 10);
-  });
-  const [exerciciosSel, setExerciciosSel] = useState<ExercicioPrescrito[]>([]);
-
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [openPicker, setOpenPicker] = useState(false);
 
-  // Carrega alunos + catálogo + (se editando) rotina
-  useEffect(() => {
-    Promise.all([listAlunos(), listExercicios({ limit: 500 })])
-      .then(([als, exs]) => { setAlunos(als); setCatalogo(exs); })
-      .catch((err) => setError(apiErrorMessage(err)));
+  const {
+    control,
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { isSubmitting, errors },
+  } = useForm<FormValues>({
+    defaultValues: { ...defaultValues(), alunoId: params.get('alunoId') ?? '' },
+    mode: 'onSubmit',
+  });
 
-    if (editing && id) {
-      getRotina(id)
-        .then((r) => {
-          setAlunoId(r.alunoId);
-          setNome(r.nome);
-          setDiaSemana(r.diaSemana);
-          setVigenciaInicio(r.vigenciaInicio.slice(0, 10));
-          setVigenciaFim(r.vigenciaFim ? r.vigenciaFim.slice(0, 10) : '');
-          setExerciciosSel(r.exercicios.map((re) => ({
-            exercicioId: re.exercicioId,
-            ordem: re.ordem,
-            series: re.series,
-            reps: re.reps ?? undefined,
-            cargaPctRP: re.cargaPctRP ?? undefined,
-            cargaKg: re.cargaKg ?? undefined,
-            descansoSeg: re.descansoSeg ?? undefined,
-            observacao: re.observacao ?? undefined,
-            exercicio: re.exercicio,
-          })));
-        })
-        .catch((err) => setError(apiErrorMessage(err)));
-    }
-  }, [id, editing]);
+  const { fields, append, remove, move } = useFieldArray({
+    control,
+    name: 'exercicios',
+  });
 
-  // Sugestão de máx 3 meses → aviso
+  const vigenciaInicio = watch('vigenciaInicio');
+  const vigenciaFim = watch('vigenciaFim');
+  const diaSemana = watch('diaSemana');
+
+  // Aviso de rotina muito longa (>3 meses).
   const aviso3meses = useMemo(() => {
     if (!vigenciaFim) return false;
     const ini = new Date(vigenciaInicio);
@@ -80,60 +107,90 @@ export default function ProfRotinaForm() {
     return diff > 95;
   }, [vigenciaInicio, vigenciaFim]);
 
+  // Bootstrap: alunos + catálogo + (se editing) rotina existente.
+  useEffect(() => {
+    Promise.all([listAlunos(), listExercicios({ limit: 500 })])
+      .then(([als, exs]) => { setAlunos(als); setCatalogo(exs); })
+      .catch((err) => setSubmitError(apiErrorMessage(err)));
+
+    if (editing && id) {
+      getRotina(id)
+        .then((r) => {
+          reset({
+            alunoId: r.alunoId,
+            nome: r.nome,
+            diaSemana: r.diaSemana,
+            vigenciaInicio: r.vigenciaInicio.slice(0, 10),
+            vigenciaFim: r.vigenciaFim ? r.vigenciaFim.slice(0, 10) : '',
+            exercicios: r.exercicios.map((re) => ({
+              exercicioId: re.exercicioId,
+              ordem: re.ordem,
+              series: re.series,
+              reps: re.reps ?? undefined,
+              cargaPctRP: re.cargaPctRP ?? undefined,
+              cargaKg: re.cargaKg ?? undefined,
+              descansoSeg: re.descansoSeg ?? undefined,
+              observacao: re.observacao ?? undefined,
+              _nome: re.exercicio.nome,
+            })),
+          });
+        })
+        .catch((err) => setSubmitError(apiErrorMessage(err)));
+    }
+  }, [id, editing, reset]);
+
   function addExercicio(ex: Exercicio) {
-    if (exerciciosSel.some((s) => s.exercicioId === ex.id)) return;
-    setExerciciosSel([...exerciciosSel, {
+    if (fields.some((f) => f.exercicioId === ex.id)) return;
+    append({
       exercicioId: ex.id,
-      ordem: exerciciosSel.length,
+      ordem: fields.length,
       series: 3,
       reps: 12,
       cargaPctRP: 70,
       descansoSeg: 90,
-      exercicio: ex,
-    }]);
+      _nome: ex.nome,
+    });
     setOpenPicker(false);
   }
 
-  function updateExSel(idx: number, patch: Partial<ExercicioPrescrito>) {
-    setExerciciosSel(exerciciosSel.map((e, i) => i === idx ? { ...e, ...patch } : e));
-  }
-
-  function removeExSel(idx: number) {
-    setExerciciosSel(exerciciosSel.filter((_, i) => i !== idx).map((e, i) => ({ ...e, ordem: i })));
-  }
-
-  function moveExSel(idx: number, delta: number) {
+  function moveEx(idx: number, delta: number) {
     const novo = idx + delta;
-    if (novo < 0 || novo >= exerciciosSel.length) return;
-    const arr = [...exerciciosSel];
-    [arr[idx], arr[novo]] = [arr[novo], arr[idx]];
-    setExerciciosSel(arr.map((e, i) => ({ ...e, ordem: i })));
+    if (novo < 0 || novo >= fields.length) return;
+    move(idx, novo);
   }
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (!alunoId) { setError('Selecione um aluno'); return; }
-    if (!nome.trim()) { setError('Informe um nome'); return; }
-    if (exerciciosSel.length === 0) { setError('Adicione ao menos um exercício'); return; }
-
-    setSaving(true);
+  async function onSubmit(values: FormValues) {
+    setSubmitError(null);
+    if (values.exercicios.length === 0) {
+      setSubmitError('Adicione ao menos um exercício');
+      return;
+    }
     try {
       const payload = {
-        alunoId,
-        nome: nome.trim(),
-        diaSemana,
-        vigenciaInicio: new Date(vigenciaInicio + 'T00:00:00').toISOString(),
-        vigenciaFim: vigenciaFim ? new Date(vigenciaFim + 'T23:59:59').toISOString() : null,
-        exercicios: exerciciosSel.map(({ exercicio: _ex, ...rest }) => rest),
+        alunoId: values.alunoId,
+        nome: values.nome.trim(),
+        diaSemana: values.diaSemana,
+        vigenciaInicio: new Date(values.vigenciaInicio + 'T00:00:00').toISOString(),
+        vigenciaFim: values.vigenciaFim
+          ? new Date(values.vigenciaFim + 'T23:59:59').toISOString()
+          : null,
+        // Strip do snapshot _nome e re-numera ordem (em caso de move).
+        exercicios: values.exercicios.map((ex, i) => ({
+          exercicioId: ex.exercicioId,
+          ordem: i,
+          series: ex.series,
+          reps: ex.reps,
+          cargaPctRP: ex.cargaPctRP,
+          cargaKg: ex.cargaKg,
+          descansoSeg: ex.descansoSeg,
+          observacao: ex.observacao,
+        })),
       };
       if (editing && id) await updateRotina(id, payload);
       else await createRotina(payload);
-      navigate(`/professor/aluno/${alunoId}`, { replace: true });
+      navigate(`/professor/aluno/${values.alunoId}`, { replace: true });
     } catch (err) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setSaving(false);
+      setSubmitError(apiErrorMessage(err));
     }
   }
 
@@ -154,44 +211,55 @@ export default function ProfRotinaForm() {
         </h1>
         <p className="text-ink-muted text-sm mb-5">Treino de musculação semanal · template do aluno</p>
 
-        {error && (
-          <div className="px-3 py-2 mb-3 rounded-[10px] bg-danger-bg text-danger text-[12px] font-medium">{error}</div>
+        {submitError && (
+          <div className="px-3 py-2 mb-3 rounded-[10px] bg-danger-bg text-danger text-[12px] font-medium">{submitError}</div>
         )}
 
-        <form onSubmit={onSubmit}>
+        <form onSubmit={handleSubmit(onSubmit)}>
           <Label>Aluno</Label>
           <select
-            value={alunoId}
-            onChange={(e) => setAlunoId(e.target.value)}
+            {...register('alunoId', { required: 'Selecione um aluno' })}
             disabled={editing}
             className="w-full h-11 px-3.5 rounded-[12px] bg-surface border border-app-strong text-ink text-[14px] mb-4 disabled:opacity-60"
           >
             <option value="">Selecione…</option>
             {alunos.map((a) => <option key={a.alunoId} value={a.alunoId}>{a.nome}</option>)}
           </select>
+          {errors.alunoId && <FieldError>{errors.alunoId.message}</FieldError>}
 
-          <Field label="Nome" placeholder="Treino A — Peito + Tríceps" value={nome} onChange={(e) => setNome(e.target.value)} required />
+          <Field
+            label="Nome"
+            placeholder="Treino A — Peito + Tríceps"
+            {...register('nome', { required: 'Informe um nome', maxLength: 120 })}
+          />
+          {errors.nome && <FieldError>{errors.nome.message}</FieldError>}
 
           <Label>Dia da semana</Label>
-          <div className="grid grid-cols-7 gap-1 mb-4">
-            {DIAS.map((d) => (
-              <button
-                key={d}
-                type="button"
-                onClick={() => setDiaSemana(d)}
-                className={cn(
-                  'py-2.5 rounded-[10px] text-[11px] font-bold uppercase tracking-wider',
-                  diaSemana === d ? 'bg-ink text-bg' : 'bg-surface border border-app-strong text-ink-muted',
-                )}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
+          <Controller
+            control={control}
+            name="diaSemana"
+            render={({ field }) => (
+              <div className="grid grid-cols-7 gap-1 mb-4">
+                {DIAS.map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => field.onChange(d)}
+                    className={cn(
+                      'py-2.5 rounded-[10px] text-[11px] font-bold uppercase tracking-wider',
+                      diaSemana === d ? 'bg-ink text-bg' : 'bg-surface border border-app-strong text-ink-muted',
+                    )}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            )}
+          />
 
           <div className="grid grid-cols-2 gap-2 mb-2">
-            <Field label="Vigência início" type="date" value={vigenciaInicio} onChange={(e) => setVigenciaInicio(e.target.value)} required />
-            <Field label="Vigência fim (opcional)" type="date" value={vigenciaFim} onChange={(e) => setVigenciaFim(e.target.value)} />
+            <Field label="Vigência início" type="date" {...register('vigenciaInicio', { required: true })} />
+            <Field label="Vigência fim (opcional)" type="date" {...register('vigenciaFim')} />
           </div>
           {aviso3meses && (
             <div className="px-3 py-2 mb-3 rounded-[10px] bg-warn-bg text-warn text-[11px] font-medium">
@@ -205,43 +273,65 @@ export default function ProfRotinaForm() {
           )}
 
           <div className="flex items-center justify-between mt-4 mb-2">
-            <Label>Exercícios ({exerciciosSel.length})</Label>
+            <Label>Exercícios ({fields.length})</Label>
             <button type="button" onClick={() => setOpenPicker(true)} className="text-[11px] font-bold uppercase tracking-wider text-accent">
               + Do catálogo
             </button>
           </div>
 
-          {exerciciosSel.length === 0 ? (
+          {fields.length === 0 ? (
             <div className="px-4 py-6 rounded-[14px] bg-surface border border-dashed border-app text-center text-ink-subtle text-[13px]">
               Nenhum exercício. Toque em "+ Do catálogo".
             </div>
           ) : (
-            exerciciosSel.map((ex, i) => (
-              <div key={ex.exercicioId} className="p-3 mb-2 rounded-[14px] bg-surface border border-app">
+            fields.map((field, i) => (
+              <div key={field.id} className="p-3 mb-2 rounded-[14px] bg-surface border border-app">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-mono text-[10px] uppercase tracking-wider font-bold text-ink-subtle flex-shrink-0">
                       {String(i + 1).padStart(2, '0')}
                     </span>
-                    <span className="text-[14px] font-semibold truncate">{ex.exercicio.nome}</span>
+                    <span className="text-[14px] font-semibold truncate">{field._nome}</span>
                   </div>
                   <div className="flex gap-1.5 flex-shrink-0">
-                    <button type="button" onClick={() => moveExSel(i, -1)} disabled={i === 0} className="text-ink-muted disabled:opacity-30 px-1">↑</button>
-                    <button type="button" onClick={() => moveExSel(i, 1)} disabled={i === exerciciosSel.length - 1} className="text-ink-muted disabled:opacity-30 px-1">↓</button>
-                    <button type="button" onClick={() => removeExSel(i)} className="text-[10px] uppercase tracking-wider text-danger ml-1">remover</button>
+                    <button type="button" onClick={() => moveEx(i, -1)} disabled={i === 0} className="text-ink-muted disabled:opacity-30 px-1">↑</button>
+                    <button type="button" onClick={() => moveEx(i, 1)} disabled={i === fields.length - 1} className="text-ink-muted disabled:opacity-30 px-1">↓</button>
+                    <button type="button" onClick={() => remove(i)} className="text-[10px] uppercase tracking-wider text-danger ml-1">remover</button>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <Field label="Séries" type="number" min={1} value={ex.series}
-                    onChange={(e) => updateExSel(i, { series: Number(e.target.value) })} />
-                  <Field label="Reps" type="number" min={1} value={ex.reps ?? ''}
-                    onChange={(e) => updateExSel(i, { reps: e.target.value === '' ? undefined : Number(e.target.value) })} />
-                  <Field label="% RP" type="number" min={0} max={150} value={ex.cargaPctRP ?? ''}
-                    onChange={(e) => updateExSel(i, { cargaPctRP: e.target.value === '' ? undefined : Number(e.target.value) })} />
-                  <Field label="Carga (kg)" type="number" min={0} step={0.5} value={ex.cargaKg ?? ''}
-                    onChange={(e) => updateExSel(i, { cargaKg: e.target.value === '' ? undefined : Number(e.target.value) })} />
-                  <Field label="RI (s)" type="number" min={0} value={ex.descansoSeg ?? ''}
-                    onChange={(e) => updateExSel(i, { descansoSeg: e.target.value === '' ? undefined : Number(e.target.value) })} />
+                  <Field
+                    label="Séries"
+                    type="number"
+                    min={1}
+                    {...register(`exercicios.${i}.series`, { valueAsNumber: true, required: true, min: 1 })}
+                  />
+                  <Field
+                    label="Reps"
+                    type="number"
+                    min={1}
+                    {...register(`exercicios.${i}.reps`, { valueAsNumber: true, setValueAs: emptyAsUndefined })}
+                  />
+                  <Field
+                    label="% RP"
+                    type="number"
+                    min={0}
+                    max={150}
+                    {...register(`exercicios.${i}.cargaPctRP`, { valueAsNumber: true, setValueAs: emptyAsUndefined })}
+                  />
+                  <Field
+                    label="Carga (kg)"
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    {...register(`exercicios.${i}.cargaKg`, { valueAsNumber: true, setValueAs: emptyAsUndefined })}
+                  />
+                  <Field
+                    label="RI (s)"
+                    type="number"
+                    min={0}
+                    {...register(`exercicios.${i}.descansoSeg`, { valueAsNumber: true, setValueAs: emptyAsUndefined })}
+                  />
                 </div>
               </div>
             ))
@@ -249,10 +339,10 @@ export default function ProfRotinaForm() {
 
           <button
             type="submit"
-            disabled={saving}
+            disabled={isSubmitting}
             className="w-full h-12 rounded-[14px] bg-accent text-accent-ink font-bold text-[14px] disabled:opacity-50 mt-4"
           >
-            {saving ? 'Salvando…' : editing ? 'Salvar rotina' : 'Criar rotina'}
+            {isSubmitting ? 'Salvando…' : editing ? 'Salvar rotina' : 'Criar rotina'}
           </button>
         </form>
       </div>
@@ -260,7 +350,7 @@ export default function ProfRotinaForm() {
       {openPicker && (
         <ExercicioPicker
           catalogo={catalogo}
-          excluidos={exerciciosSel.map((e) => e.exercicioId)}
+          excluidos={fields.map((f) => f.exercicioId)}
           onPick={addExercicio}
           onClose={() => setOpenPicker(false)}
         />
@@ -269,12 +359,25 @@ export default function ProfRotinaForm() {
   );
 }
 
+// `valueAsNumber` do RHF transforma '' em NaN. Esta helper converte NaN
+// e '' em undefined, mantendo o tipo `number | undefined` que o backend
+// espera (campos opcionais no schema Zod).
+function emptyAsUndefined(v: unknown): number | undefined {
+  if (v === '' || v === null || v === undefined) return undefined;
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isNaN(n) ? undefined : n;
+}
+
 function Label({ children }: { children: React.ReactNode }) {
   return (
     <div className="text-[10px] uppercase tracking-[0.6px] font-bold text-ink-subtle text-mono mb-1.5">
       {children}
     </div>
   );
+}
+
+function FieldError({ children }: { children: React.ReactNode }) {
+  return <div className="text-[11px] text-danger mb-2 -mt-1">{children}</div>;
 }
 
 function ExercicioPicker({ catalogo, excluidos, onPick, onClose }: {

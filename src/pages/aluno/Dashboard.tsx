@@ -4,10 +4,11 @@ import { toast } from 'sonner';
 
 import { AlunoTabs } from '@/components/AlunoTabs';
 import { Button } from '@/components/ui/button';
-import { WeeklyTimeline, inicioSemana, key as dayKey } from '@/components/aluno/WeeklyTimeline';
+import { WeeklyTimeline } from '@/components/aluno/WeeklyTimeline';
+import { inicioSemana, key as dayKey, comHoraAtual } from '@/lib/dates';
 import { WorkoutDayCard, RestDayCard } from '@/components/aluno/WorkoutDayCard';
 import { useAuth } from '@/contexts/AuthContext';
-import { apiErrorMessage } from '@/lib/api';
+import { apiErrorMessage, isCancelError } from '@/lib/api';
 import { listTreinos } from '@/lib/api/treinos';
 import { iniciarTreinoDeRotina, listRotinas, type DiaSemana, type Rotina } from '@/lib/api/rotinas';
 import {
@@ -46,33 +47,56 @@ export default function AlunoDashboard() {
     return f;
   }, [semanaInicio]);
 
-  // Busca treinos da semana + todas as rotinas do aluno (para projetar)
-  async function carregar() {
+  // Busca treinos da semana + todas as rotinas do aluno (para projetar).
+  // PR #15: aceita AbortSignal pra useEffect cleanup cancelar fetches
+  // pendentes quando o aluno troca de semana ou navega pra outra rota.
+  async function carregar(signal?: AbortSignal) {
     if (!user?.aluno?.id) return;
     setLoading(true);
     setLoadError(null);
     try {
       const [t, r, s] = await Promise.all([
-        listTreinos(user.aluno.id, {
-          desde: semanaInicio.toISOString(),
-          ate: semanaFim.toISOString(),
-          limit: 100,
+        listTreinos(
+          user.aluno.id,
+          {
+            desde: semanaInicio.toISOString(),
+            ate: semanaFim.toISOString(),
+            limit: 100,
+          },
+          { signal },
+        ),
+        listRotinas({ alunoId: user.aluno.id }, { signal }).catch((e) => {
+          if (isCancelError(e)) throw e; // re-throw cancel pro outer catch
+          return [];
         }),
-        listRotinas({ alunoId: user.aluno.id }).catch(() => []),
-        getStravaStatus().catch(() => null),
+        getStravaStatus({ signal }).catch((e) => {
+          if (isCancelError(e)) throw e;
+          return null;
+        }),
       ]);
       setTreinos(t);
       setRotinas(r);
       if (s) setStrava(s);
     } catch (err) {
-      // Erro de load INICIAL fica como banner inline — sem dados não há o que mostrar.
+      // Erro de cancel não é falha real — usuário trocou de tela.
+      if (isCancelError(err)) return;
       setLoadError(apiErrorMessage(err));
     } finally {
-      setLoading(false);
+      // Cancelado: o componente está sendo desmontado (ou refetch novo
+      // já começou). Não toca em loading pra evitar flash.
+      if (!signal?.aborted) setLoading(false);
     }
   }
 
-  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [user?.aluno?.id, semanaInicio.getTime()]);
+  // PR #15 (audit 5.17) — cleanup aborta o fetch em curso. Trocar de
+  // semana, mudar de rota ou rerender desencadeia abort imediato; o
+  // novo render dispara a fetch nova com signal fresco.
+  useEffect(() => {
+    const ctrl = new AbortController();
+    void carregar(ctrl.signal);
+    return () => ctrl.abort();
+    /* eslint-disable-next-line */
+  }, [user?.aluno?.id, semanaInicio.getTime()]);
 
   // ─── Mapas para a fita + feed ────────────────────────────────
   const treinosByDay = useMemo(() => {
@@ -150,8 +174,10 @@ export default function AlunoDashboard() {
   async function onIniciarRotina(rotina: Rotina) {
     setIniciandoId(rotina.id);
     try {
-      const dataAlvo = new Date(diaSelecionado);
-      dataAlvo.setHours(7, 0, 0, 0);
+      // PR #14 — hora real do dispositivo, não 7AM hardcoded. Mantém a
+      // DATA selecionada (atleta pode estar revisando ontem ou pré-
+      // agendando amanhã) mas grava a hora atual. Backend valida janela.
+      const dataAlvo = comHoraAtual(diaSelecionado);
       const treino = await iniciarTreinoDeRotina(rotina.id, dataAlvo.toISOString());
       navigate(`/aluno/treino/${treino.id}`);
     } catch (err) {

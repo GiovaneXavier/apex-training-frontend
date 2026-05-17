@@ -13,13 +13,28 @@ export type ListTreinosFilters = {
   limit?: number;
 };
 
-export async function listTreinos(alunoId: string, filters: ListTreinosFilters = {}): Promise<Treino[]> {
-  const { data } = await api.get<{ treinos: Treino[] }>(`/treinos/${alunoId}`, { params: filters });
+// PR #15 (audit 5.17) — `signal` opcional propaga AbortController de
+// dentro de um useEffect. Trocar de rota cancela fetches pendentes,
+// poupa banda do celular e load do backend.
+export async function listTreinos(
+  alunoId: string,
+  filters: ListTreinosFilters = {},
+  opts: { signal?: AbortSignal } = {},
+): Promise<Treino[]> {
+  const { data } = await api.get<{ treinos: Treino[] }>(`/treinos/${alunoId}`, {
+    params: filters,
+    signal: opts.signal,
+  });
   return data.treinos;
 }
 
-export async function getTreino(treinoId: string): Promise<Treino> {
-  const { data } = await api.get<{ treino: Treino }>(`/treinos/detalhe/${treinoId}`);
+export async function getTreino(
+  treinoId: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<Treino> {
+  const { data } = await api.get<{ treino: Treino }>(`/treinos/detalhe/${treinoId}`, {
+    signal: opts.signal,
+  });
   return data.treino;
 }
 
@@ -38,6 +53,14 @@ export async function prescreverTreino(input: PrescreverInput): Promise<Treino> 
 
 export async function deleteTreino(treinoId: string): Promise<void> {
   await api.delete(`/treinos/${treinoId}`);
+}
+
+// PR #16 — clonar treino prescrito (reaproveitamento de carga).
+// Backend zera o `realizado` no detalhes e grava como PENDENTE numa
+// `dataAlvo` nova. Aceita janela [-90d, +180d].
+export async function clonarTreino(treinoId: string, dataAlvo: string): Promise<Treino> {
+  const { data } = await api.post<{ treino: Treino }>(`/treinos/${treinoId}/clonar`, { dataAlvo });
+  return data.treino;
 }
 
 export type HistoricoCarga = {
