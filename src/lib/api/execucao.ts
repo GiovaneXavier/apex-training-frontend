@@ -46,7 +46,7 @@ export async function salvarExecucao(treinoId: string, payload: SalvarPayload): 
 //
 // Musculação NÃO usa este wrapper — `useExecucaoTreino` tem seu próprio
 // retry baseado em localStorage. Wrapper é só pra Live components single-
-// shot: Corrida/Ciclismo/Natação/Hyrox.
+// shot: Corrida/Ciclismo/Natação/Hyrox/Jiu-Jitsu.
 // ─────────────────────────────────────────────────────────────────────
 
 export type SaveResult =

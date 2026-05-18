@@ -22,6 +22,9 @@ const NatacaoLive = lazy(() =>
 const HyroxLive = lazy(() =>
   import('@/components/workout/HyroxLive').then((m) => ({ default: m.HyroxLive })),
 );
+const JiuJitsuLive = lazy(() =>
+  import('@/components/workout/JiuJitsuLive').then((m) => ({ default: m.JiuJitsuLive })),
+);
 
 // Fallback inline — placeholder magro pra evitar criar chunk extra.
 // Tempo real de carga em 4G geralmente fica abaixo de 500ms (Live
@@ -208,6 +211,24 @@ export default function AlunoTreino() {
         )}
         <Suspense fallback={<LiveFallback />}>
           <HyroxLive treino={treino} />
+        </Suspense>
+      </>
+    );
+  }
+
+  // Treino real: jiu-jitsu → JiuJitsuLive (diário pós-rola, PR #23)
+  if (!isDemo && treino && treino.detalhes.tipo === 'jiu_jitsu') {
+    return (
+      <>
+        {treino.status !== 'CONCLUIDO' && treino.status !== 'PULADO' && (
+          <ReagendarButton
+            treinoId={treino.id}
+            dataAtual={treino.dataAlvo}
+            onReagendado={(iso) => setTreino({ ...treino, dataAlvo: iso })}
+          />
+        )}
+        <Suspense fallback={<LiveFallback />}>
+          <JiuJitsuLive treino={treino} />
         </Suspense>
       </>
     );
