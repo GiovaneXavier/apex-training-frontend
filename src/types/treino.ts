@@ -1,12 +1,17 @@
 // Tipos espelhados do backend (src/schemas/treino.schemas.js).
 // Mantém em sincronia manualmente — sem zod no front por enquanto.
 
+// PR #22 — alinhamento com enum Prisma + Zod do backend.
+// HYROX já existia no banco/Zod do schema (drift histórico).
+// JIU_JITSU entra agora pelo Sprint 8.
 export type Modalidade =
   | 'MUSCULACAO'
   | 'CORRIDA'
   | 'CICLISMO'
   | 'NATACAO'
   | 'TRIATHLON'
+  | 'HYROX'
+  | 'JIU_JITSU'
   | 'OUTRO';
 
 export type StatusTreino = 'PENDENTE' | 'EM_EXECUCAO' | 'CONCLUIDO' | 'PULADO';
@@ -314,6 +319,8 @@ export const MODALIDADE_LABEL: Record<Modalidade, string> = {
   CICLISMO: 'Ciclismo',
   NATACAO: 'Natação',
   TRIATHLON: 'Triathlon',
+  HYROX: 'Hyrox',
+  JIU_JITSU: 'Jiu-Jitsu',
   OUTRO: 'Outro',
 };
 

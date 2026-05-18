@@ -4,7 +4,16 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { Field } from '@/components/auth/Field';
 import { apiErrorMessage } from '@/lib/api';
-import { GRUPO_MUSCULAR_LABEL, listExercicios, type Exercicio, type GrupoMuscular } from '@/lib/api/exercicios';
+import {
+  DOMINIO_LABEL,
+  GRUPO_MUSCULAR_LABEL,
+  TIPO_MOVIMENTO_LABEL,
+  listExercicios,
+  type DominioExercicio,
+  type Exercicio,
+  type GrupoMuscular,
+  type TipoMovimento,
+} from '@/lib/api/exercicios';
 import { listAlunos, type AlunoVinculado } from '@/lib/api/professor';
 import {
   DIAS,
@@ -380,6 +389,9 @@ function FieldError({ children }: { children: React.ReactNode }) {
   return <div className="text-[11px] text-danger mb-2 -mt-1">{children}</div>;
 }
 
+// PR #22 — picker estendido: aba de DOMÍNIO no topo (Musculação/BJJ/etc),
+// filtros contextuais por domínio (grupo muscular pra musc, tipo de
+// movimento pra BJJ), e linha secundária com `posicao` quando BJJ.
 function ExercicioPicker({ catalogo, excluidos, onPick, onClose }: {
   catalogo: Exercicio[];
   excluidos: string[];
@@ -387,14 +399,26 @@ function ExercicioPicker({ catalogo, excluidos, onPick, onClose }: {
   onClose: () => void;
 }) {
   const [q, setQ] = useState('');
+  const [dominio, setDominio] = useState<DominioExercicio>('MUSCULACAO');
   const [grupo, setGrupo] = useState<GrupoMuscular | ''>('');
+  const [tipoMov, setTipoMov] = useState<TipoMovimento | ''>('');
+
+  // Trocar de domínio reseta filtros secundários (não fazem sentido
+  // cruzar — grupo muscular pra BJJ não importa).
+  function setDominioReset(d: DominioExercicio) {
+    setDominio(d);
+    setGrupo('');
+    setTipoMov('');
+  }
 
   const filtered = useMemo(() => {
     return catalogo
       .filter((e) => !excluidos.includes(e.id))
-      .filter((e) => grupo ? e.grupoMuscular === grupo : true)
+      .filter((e) => e.dominio === dominio)
+      .filter((e) => (dominio === 'MUSCULACAO' && grupo) ? e.grupoMuscular === grupo : true)
+      .filter((e) => (dominio === 'JIU_JITSU' && tipoMov) ? e.tipoMovimento === tipoMov : true)
       .filter((e) => q.trim() ? e.nome.toLowerCase().includes(q.toLowerCase()) : true);
-  }, [catalogo, excluidos, q, grupo]);
+  }, [catalogo, excluidos, q, dominio, grupo, tipoMov]);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center p-0 md:p-4" onClick={onClose}>
@@ -407,22 +431,68 @@ function ExercicioPicker({ catalogo, excluidos, onPick, onClose }: {
           <button type="button" onClick={onClose} className="text-ink-muted text-[20px] leading-none">×</button>
         </div>
 
-        <Field label="Buscar" placeholder="ex: supino..." value={q} onChange={(e) => setQ(e.target.value)} />
-        <div className="text-[10px] uppercase tracking-[0.6px] font-bold text-ink-subtle text-mono mb-1.5">Grupo</div>
-        <select
-          value={grupo}
-          onChange={(e) => setGrupo(e.target.value as GrupoMuscular | '')}
-          className="w-full h-11 px-3.5 rounded-[12px] bg-surface border border-app-strong text-ink text-[14px] mb-3"
-        >
-          <option value="">Todos</option>
-          {(Object.keys(GRUPO_MUSCULAR_LABEL) as GrupoMuscular[]).map((g) => (
-            <option key={g} value={g}>{GRUPO_MUSCULAR_LABEL[g]}</option>
+        {/* Tabs de domínio — Musculação, Jiu-Jitsu, Mobilidade, Outro */}
+        <div className="flex gap-1 mb-3" role="tablist">
+          {(Object.keys(DOMINIO_LABEL) as DominioExercicio[]).map((d) => (
+            <button
+              key={d}
+              type="button"
+              role="tab"
+              aria-selected={dominio === d}
+              onClick={() => setDominioReset(d)}
+              className={
+                'flex-1 py-1.5 rounded-[10px] text-[10px] font-bold uppercase tracking-wider ' +
+                (dominio === d
+                  ? 'bg-ink text-bg'
+                  : 'bg-surface border border-app-strong text-ink-muted')
+              }
+            >
+              {DOMINIO_LABEL[d]}
+            </button>
           ))}
-        </select>
+        </div>
+
+        <Field label="Buscar" placeholder={dominio === 'JIU_JITSU' ? 'ex: passagem toreando...' : 'ex: supino...'} value={q} onChange={(e) => setQ(e.target.value)} />
+
+        {/* Filtro secundário contextual: grupo muscular pra musc,
+            tipo de movimento pra BJJ, nada pros outros. */}
+        {dominio === 'MUSCULACAO' && (
+          <>
+            <div className="text-[10px] uppercase tracking-[0.6px] font-bold text-ink-subtle text-mono mb-1.5">Grupo</div>
+            <select
+              value={grupo}
+              onChange={(e) => setGrupo(e.target.value as GrupoMuscular | '')}
+              className="w-full h-11 px-3.5 rounded-[12px] bg-surface border border-app-strong text-ink text-[14px] mb-3"
+            >
+              <option value="">Todos</option>
+              {(Object.keys(GRUPO_MUSCULAR_LABEL) as GrupoMuscular[]).map((g) => (
+                <option key={g} value={g}>{GRUPO_MUSCULAR_LABEL[g]}</option>
+              ))}
+            </select>
+          </>
+        )}
+
+        {dominio === 'JIU_JITSU' && (
+          <>
+            <div className="text-[10px] uppercase tracking-[0.6px] font-bold text-ink-subtle text-mono mb-1.5">Tipo</div>
+            <select
+              value={tipoMov}
+              onChange={(e) => setTipoMov(e.target.value as TipoMovimento | '')}
+              className="w-full h-11 px-3.5 rounded-[12px] bg-surface border border-app-strong text-ink text-[14px] mb-3"
+            >
+              <option value="">Todos</option>
+              {(Object.keys(TIPO_MOVIMENTO_LABEL) as TipoMovimento[]).map((t) => (
+                <option key={t} value={t}>{TIPO_MOVIMENTO_LABEL[t]}</option>
+              ))}
+            </select>
+          </>
+        )}
 
         <div className="space-y-1.5 max-h-[50dvh] overflow-y-auto">
           {filtered.length === 0 ? (
-            <div className="text-ink-subtle text-[13px] py-4 text-center">Nenhum exercício encontrado.</div>
+            <div className="text-ink-subtle text-[13px] py-4 text-center">
+              Nenhum exercício encontrado em {DOMINIO_LABEL[dominio]}.
+            </div>
           ) : (
             filtered.map((ex) => (
               <button
@@ -433,7 +503,9 @@ function ExercicioPicker({ catalogo, excluidos, onPick, onClose }: {
               >
                 <div className="text-[14px] font-semibold">{ex.nome}</div>
                 <div className="text-[11px] text-ink-subtle">
-                  {ex.grupoMuscular ? GRUPO_MUSCULAR_LABEL[ex.grupoMuscular] : '—'} · {ex.equipamento ?? '—'}
+                  {ex.dominio === 'JIU_JITSU'
+                    ? `${ex.tipoMovimento ? TIPO_MOVIMENTO_LABEL[ex.tipoMovimento] : '—'} · ${ex.posicao ?? '—'}`
+                    : `${ex.grupoMuscular ? GRUPO_MUSCULAR_LABEL[ex.grupoMuscular] : '—'} · ${ex.equipamento ?? '—'}`}
                 </div>
               </button>
             ))
