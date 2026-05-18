@@ -15,6 +15,7 @@ import {
   type VinculoProfessorItem,
 } from '@/lib/api/alunoVinculos';
 import { getPlanoAtual, type PlanoAlimentar } from '@/lib/api/planos';
+import { FaixaProgresso } from '@/components/aluno/FaixaProgresso';
 import {
   buildStravaAuthUrl,
   disconnectStrava,
@@ -160,6 +161,14 @@ export default function AlunoPerfil() {
             <h1 className="text-[22px] font-bold tracking-tight leading-tight">{user?.nome}</h1>
             <div className="text-[12px] text-ink-muted">{user?.email}</div>
           </div>
+        </div>
+
+        {/* PR #24 — Jornada do Faixa Preta (BJJ). Aparece sempre;
+            componente cuida do empty state. Posicionado antes do
+            plano alimentar porque é uma seção mais densa visualmente
+            (faixa + barra + métricas) — fluxo de leitura natural. */}
+        <div className="mb-6">
+          <FaixaProgresso />
         </div>
 
         {/* PR #18b — plano alimentar vigente. Card discreto: aparece
