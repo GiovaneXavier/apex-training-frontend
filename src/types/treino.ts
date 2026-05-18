@@ -277,6 +277,46 @@ export type DetalhesOutro = {
   realizado?: string | null;
 };
 
+// PR #23 — Jiu-Jitsu.
+export type JiuJitsuAquecimento = {
+  nome: string;
+  duracaoSeg?: number;
+  observacao?: string;
+};
+
+export type JiuJitsuDrill = {
+  movimento: string;
+  reps?: number;
+  duracaoSeg?: number;
+  observacao?: string;
+};
+
+export type JiuJitsuRolas = {
+  rounds: number;
+  tempoRoundSeg: number;
+  descansoSeg?: number;
+  observacao?: string;
+};
+
+export type DetalhesJiuJitsuRealizado = {
+  matTimeSegundos?: number;
+  roundsCompletos?: number;
+  finalizacoesFeitas?: number;
+  finalizacoesSofridas?: number;
+  /** 1..10 (inteiro). Slider único cobre sono + fadiga + humor. */
+  readinessRating?: number;
+  observacao?: string;
+};
+
+export type DetalhesJiuJitsu = {
+  tipo: 'jiu_jitsu';
+  aquecimento?: JiuJitsuAquecimento[];
+  drills?: JiuJitsuDrill[];
+  rolas?: JiuJitsuRolas;
+  observacao?: string;
+  realizado?: DetalhesJiuJitsuRealizado | null;
+};
+
 export type TreinoDetalhes =
   | DetalhesMusculacao
   | DetalhesCorrida
@@ -284,6 +324,7 @@ export type TreinoDetalhes =
   | DetalhesNatacao
   | DetalhesTriathlon
   | DetalhesHyrox
+  | DetalhesJiuJitsu
   | DetalhesOutro;
 
 // ── Entidade ───────────────────────────────────────────────────

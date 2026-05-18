@@ -76,6 +76,10 @@ function subtituloPorModalidade(treino: Treino): string {
       return `Hyrox · ${d.blocos.length} blocos`;
     case 'triathlon':
       return 'Triathlon';
+    case 'jiu_jitsu':
+      return d.rolas
+        ? `Jiu-Jitsu · ${d.rolas.rounds} rolas`
+        : 'Jiu-Jitsu';
     case 'outro':
       return 'Treino livre';
   }
