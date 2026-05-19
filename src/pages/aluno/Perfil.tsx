@@ -16,6 +16,7 @@ import {
 } from '@/lib/api/alunoVinculos';
 import { getPlanoAtual, type PlanoAlimentar } from '@/lib/api/planos';
 import { FaixaProgresso } from '@/components/aluno/FaixaProgresso';
+import { NotificationsToggle } from '@/components/settings/NotificationsToggle';
 import {
   buildStravaAuthUrl,
   disconnectStrava,
@@ -169,6 +170,12 @@ export default function AlunoPerfil() {
             (faixa + barra + métricas) — fluxo de leitura natural. */}
         <div className="mb-6">
           <FaixaProgresso />
+        </div>
+
+        {/* PR #26 — Web Push opt-in. Discreto; UX leve sem prompts
+            automáticos no boot (anti-fricção). */}
+        <div className="mb-6">
+          <NotificationsToggle />
         </div>
 
         {/* PR #18b — plano alimentar vigente. Card discreto: aparece

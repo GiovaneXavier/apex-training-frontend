@@ -1,5 +1,6 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { Field } from '@/components/auth/Field';
 import { Card } from '@/components/ui/card';
@@ -22,6 +23,11 @@ import { FormCiclismo } from '@/components/professor/forms/FormCiclismo';
 import { FormCorrida } from '@/components/professor/forms/FormCorrida';
 import { FormHyrox } from '@/components/professor/forms/FormHyrox';
 import { FormMusculacao } from '@/components/professor/forms/FormMusculacao';
+import type { DraftTreinoResponse } from '@/lib/api/aiDraft';
+
+// PR #30 — AIDraftModal lazy. Chunk separado: só baixa quando coach
+// clica "✨ Gerar com IA". Mantém initial bundle do Prescrever intacto.
+const AIDraftModal = lazy(() => import('@/components/professor/AIDraftModal'));
 import { FormNatacao } from '@/components/professor/forms/FormNatacao';
 import { PreviewCard } from '@/components/professor/forms/PreviewCard';
 import {
@@ -55,6 +61,12 @@ export default function ProfPrescrever() {
 
   // ── Estados por modalidade ─────────────────────────────────
   const [exercicios, setExercicios] = useState<ExerForm[]>([novoExercicio()]);
+
+  // PR #30 — Modal IA Draft. Lazy import. Aplicação substitui a lista
+  // de exercícios com diasSugeridos[0] do draft (1 treino = 1 dia da
+  // rotina); restante dos dias é exibido como toast pra coach criar
+  // treinos adicionais.
+  const [aiDraftOpen, setAiDraftOpen] = useState(false);
 
   const [corridaSubtipo, setCorridaSubtipo] = useState<CorridaSubtipo>('BASE');
   const [corridaModo, setCorridaModo] = useState<'simples' | 'avancado'>('simples');
@@ -159,6 +171,41 @@ export default function ProfPrescrever() {
     cssBaseSegPor100m, natacaoBlocos,
     hyroxBlocos, outroDescricao,
   ]);
+
+  // PR #30 — Aplica draft IA: substitui lista de exercícios com o dia 1
+  // do draft. Demais dias viram toast informativo pra coach criar como
+  // treinos adicionais. Confirma se há exercícios não-vazios pra evitar
+  // sobrescrever trabalho.
+  function applyAiDraft(draft: DraftTreinoResponse) {
+    const hasFilledExercicios = exercicios.some((e) => e.nome.trim().length > 0);
+    if (hasFilledExercicios) {
+      const ok = window.confirm(
+        'Já há exercícios preenchidos. Substituir pelo draft IA?',
+      );
+      if (!ok) return;
+    }
+    const dia1 = draft.diasSugeridos[0];
+    if (!dia1) return;
+    const novos: ExerForm[] = dia1.exercicios.map((ex) => ({
+      exercicioId: ex.exercicioId ?? undefined,
+      // Usa nome canônico quando bateu no catálogo; senão preserva o do LLM.
+      nome: ex.nomeCanonico ?? ex.nome,
+      videoUrl: '',
+      series: ex.series,
+      // repsRange → number pro form atual. Pega faixa alta ("8-12" → 12).
+      reps: parseRepsRange(ex.repsRange),
+      cargaPctRP: ex.cargaPctRP ?? undefined,
+      descansoSeg: ex.descansoSeg,
+    }));
+    setExercicios(novos);
+    // Sugestão de título se ainda vazio
+    if (!titulo.trim()) setTitulo(`${dia1.label}`);
+    // Dias restantes → toast com instrução
+    const remainingDays = draft.diasSugeridos.length - 1;
+    if (remainingDays > 0) {
+      toast(`Aplicado o ${dia1.label}. Mais ${remainingDays} dia${remainingDays > 1 ? 's' : ''} no draft — crie como treinos separados se quiser.`, { duration: 8000 });
+    }
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -287,7 +334,29 @@ export default function ProfPrescrever() {
               </SecHeader>
 
               {modalidade === 'MUSCULACAO' && (
-                <FormMusculacao exercicios={exercicios} onChange={setExercicios} />
+                <>
+                  {/* PR #30 — CTA pra abrir geração IA do esqueleto.
+                      Disabled enquanto aluno não selecionado (modal
+                      precisa do contexto). */}
+                  <button
+                    type="button"
+                    onClick={() => setAiDraftOpen(true)}
+                    disabled={!alunoId}
+                    data-testid="ai-draft-open"
+                    className={cn(
+                      'w-full h-11 mb-3 rounded-[12px] border border-accent/40 bg-surface',
+                      'text-accent text-[12px] font-bold uppercase tracking-wider',
+                      'disabled:opacity-40 disabled:cursor-not-allowed',
+                    )}
+                  >
+                    ✨ Gerar rotina com IA
+                  </button>
+                  <FormMusculacao
+                    exercicios={exercicios}
+                    onChange={setExercicios}
+                    alunoId={alunoId}
+                  />
+                </>
               )}
               {modalidade === 'CORRIDA' && (
                 <FormCorrida
@@ -354,8 +423,29 @@ export default function ProfPrescrever() {
           )}
         </aside>
       </div>
+
+      {aiDraftOpen && (
+        <Suspense fallback={null}>
+          <AIDraftModal
+            alunoId={alunoId}
+            onApply={applyAiDraft}
+            onClose={() => setAiDraftOpen(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
+}
+
+// PR #30 — parser de faixa de reps do LLM ("8-12" → 12 / "30s" → 30 /
+// "AMRAP" → fallback 12). Espelha lógica do PR #29 (mas inline aqui
+// pra não criar dependência cruzada entre features de IA).
+function parseRepsRange(reps: string): number {
+  const range = reps.match(/^\s*(\d+)\s*-\s*(\d+)\s*$/);
+  if (range) return Number(range[2]);
+  const single = reps.match(/^\s*(\d+)/);
+  if (single) return Number(single[1]);
+  return 12;
 }
 
 function SecHeader({ children }: { children: React.ReactNode }) {

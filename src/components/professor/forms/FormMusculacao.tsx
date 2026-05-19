@@ -1,14 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Field } from '@/components/auth/Field';
+import { ExerciseBlockAISuggest } from '@/components/professor/ExerciseBlockAISuggest';
 import { listExercicios, type Exercicio } from '@/lib/api/exercicios';
 import { BlocoCard, Label, novoExercicio, type ExerForm } from './shared';
 
 type Props = {
   exercicios: ExerForm[];
   onChange: (v: ExerForm[]) => void;
+  // PR #29 — alunoId é o contexto pra IA olhar histórico de cargas do
+  // aluno selecionado no topo do Workout Builder. Opcional pra retrocompat
+  // (uso em outros call sites); botão IA fica disabled quando ausente.
+  alunoId?: string;
 };
 
-export function FormMusculacao({ exercicios, onChange }: Props) {
+export function FormMusculacao({ exercicios, onChange, alunoId }: Props) {
   // Catálogo de exercícios para autocomplete (datalist)
   const [catalog, setCatalog] = useState<Exercicio[]>([]);
 
@@ -114,6 +119,20 @@ export function FormMusculacao({ exercicios, onChange }: Props) {
               onChange={(e) => update(i, { descansoSeg: Number(e.target.value) })}
             />
           </div>
+
+          {/* PR #29 — botão IA "Sugerir progressão". Disabled quando o
+              coach ainda não selecionou aluno OU não preencheu o nome do
+              exercício. Aplicar preenche series + reps. cargaPctRP fica
+              a critério do coach (precisa do RP do aluno pra converter
+              kg → %). */}
+          {alunoId !== undefined && (
+            <ExerciseBlockAISuggest
+              alunoId={alunoId}
+              exercicioNome={ex.nome}
+              modalidade="MUSCULACAO"
+              onApply={(patch) => update(i, patch)}
+            />
+          )}
         </BlocoCard>
       ))}
     </div>

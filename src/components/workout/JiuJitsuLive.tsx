@@ -1,15 +1,22 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, lazy, Suspense, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { apiErrorMessage } from '@/lib/api';
 import { salvarExecucaoOfflineFirst } from '@/lib/api/execucao';
+import type { VoiceExtractResult } from '@/lib/api/voice';
+import { clearDraft, getDraft, type VoiceDraft } from '@/lib/offline/voiceDrafts';
 import { cn } from '@/lib/utils';
 import type {
   DetalhesJiuJitsu,
   DetalhesJiuJitsuRealizado,
   Treino,
 } from '@/types/treino';
+
+// VoiceDiary é chunk separado — só carrega quando o atleta clica "🎙️".
+// MediaRecorder API é nativa, sem polyfill, então o chunk fica pequeno
+// (~3-5 KB Gzip). Bundle inicial não cresce.
+const VoiceDiary = lazy(() => import('./VoiceDiary'));
 
 // PR #23 — Diário de Tatame (pós-rola).
 //
@@ -68,6 +75,56 @@ export function JiuJitsuLive({ treino }: Props) {
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // PR #25 — Diário de Voz com IA.
+  // - `voiceOpen` controla modal.
+  // - `pendingDraft` é rascunho recuperado do IndexedDB (processado em
+  //   background quando o componente estava desmontado). Banner aparece
+  //   se setado; atleta decide aplicar ou descartar.
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [pendingDraft, setPendingDraft] = useState<VoiceDraft | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const draft = await getDraft(treino.id);
+      if (!cancelled) setPendingDraft(draft);
+    })();
+    return () => { cancelled = true; };
+  }, [treino.id]);
+
+  function applyVoiceFields(fields: VoiceExtractResult['fields']) {
+    if (fields.matTimeSegundos != null) {
+      setMatTime(formatDuracao(fields.matTimeSegundos));
+    }
+    if (fields.roundsCompletos != null) setRounds(fields.roundsCompletos);
+    if (fields.finalizacoesFeitas != null) setFinFeitas(fields.finalizacoesFeitas);
+    if (fields.finalizacoesSofridas != null) setFinSofridas(fields.finalizacoesSofridas);
+    if (fields.readinessRating != null) setReadiness(fields.readinessRating);
+    if (fields.observacao) setObservacao(fields.observacao);
+  }
+
+  async function onApplyVoice(result: VoiceExtractResult) {
+    applyVoiceFields(result.fields);
+    await clearDraft(treino.id);
+    setPendingDraft(null);
+    setVoiceOpen(false);
+    toast.success('Campos preenchidos · revise e salve');
+  }
+
+  async function onApplyDraft() {
+    if (!pendingDraft) return;
+    applyVoiceFields(pendingDraft.fields);
+    await clearDraft(treino.id);
+    setPendingDraft(null);
+    toast.success('Diário de voz aplicado');
+  }
+
+  async function onDiscardDraft() {
+    if (!pendingDraft) return;
+    await clearDraft(treino.id);
+    setPendingDraft(null);
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -130,6 +187,55 @@ export function JiuJitsuLive({ treino }: Props) {
       <div className="px-5 max-w-md mx-auto">
         <h1 className="text-[24px] font-bold tracking-tight mb-1">{treino.titulo}</h1>
         <p className="text-ink-muted text-sm mb-5">Diário de tatame · pós-rola</p>
+
+        {/* PR #25 — Banner de rascunho processado em background.
+            Aparece quando o atleta gravou voz offline, drenou em outra
+            tela, e voltou pra este treino. */}
+        {pendingDraft && (
+          <div
+            data-testid="voice-draft-banner"
+            className="mb-4 p-3 rounded-[12px] bg-accent/5 border border-accent/30"
+          >
+            <div className="text-mono text-[10px] uppercase tracking-[0.6px] text-accent font-bold mb-1">
+              🎙️ Diário de voz processado
+            </div>
+            <p className="text-[12px] text-ink-muted mb-2">
+              Encontramos um relato gravado offline já processado pela IA.
+              Deseja aplicar?
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onApplyDraft}
+                data-testid="voice-draft-apply"
+                className="flex-1 h-9 rounded-[10px] bg-accent text-accent-ink text-[11px] font-bold uppercase tracking-wider"
+              >
+                Aplicar
+              </button>
+              <button
+                type="button"
+                onClick={onDiscardDraft}
+                data-testid="voice-draft-discard"
+                className="flex-1 h-9 rounded-[10px] bg-surface border border-app text-ink-muted text-[11px] font-bold uppercase tracking-wider"
+              >
+                Descartar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* PR #25 — CTA pra abrir o Diário de Voz (lazy). Some quando
+            o draft banner está exibido pra não competir visualmente. */}
+        {!pendingDraft && (
+          <button
+            type="button"
+            onClick={() => setVoiceOpen(true)}
+            data-testid="voice-open"
+            className="w-full mb-4 h-11 rounded-[12px] bg-surface border border-accent/40 text-accent text-[12px] font-bold uppercase tracking-wider"
+          >
+            🎙️ Diário de voz (IA)
+          </button>
+        )}
 
         {/* Resumo da prescrição (se houver) */}
         {detalhes.rolas && (
@@ -241,6 +347,16 @@ export function JiuJitsuLive({ treino }: Props) {
           </button>
         </form>
       </div>
+
+      {voiceOpen && (
+        <Suspense fallback={null}>
+          <VoiceDiary
+            treinoId={treino.id}
+            onApply={onApplyVoice}
+            onClose={() => setVoiceOpen(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

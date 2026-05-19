@@ -13,6 +13,7 @@ import {
 } from '@/lib/api/professor';
 import { apiErrorMessage, isCancelError } from '@/lib/api';
 import { formatDate } from '@/lib/format';
+import { CoachBriefingCard } from '@/components/professor/CoachBriefingCard';
 
 export default function ProfDashboard() {
   const { user, logout } = useAuth();
@@ -76,6 +77,13 @@ export default function ProfDashboard() {
           <StatCard label="Pendentes na semana" value={stats?.pendentesSemana} accent />
           <StatCard label="Concluídos na semana" value={stats?.concluidosSemana} />
           <StatCard label="Total prescritos" value={stats?.treinosPrescritos} />
+        </div>
+
+        {/* PR #28 — Coach Briefing Semanal (IA). Topo da hierarquia visual
+            depois das stats secas — síntese deve preceder a lista crua de
+            alertas (que continua disponível abaixo). */}
+        <div className="mb-4">
+          <CoachBriefingCard />
         </div>
 
         {/* PR #17 — Radar de aderência. Aparece acima das ações pra ser
