@@ -6,9 +6,16 @@ import { api } from '@/lib/api';
 // SEM withCredentials porque não há cookie envolvido — economiza
 // pre-flight CORS em alguns browsers.
 
-export async function fetchVapidPublicKey(): Promise<string> {
-  const { data } = await api.get<{ key: string }>('/push/vapid-public-key');
-  return data.key;
+export type VapidPublicKeyResponse = {
+  key: string;
+  hash: string;
+};
+
+// PR #36 — backend agora devolve `hash` (SHA-256 base64url da `key`)
+// pro client validar integridade em trânsito antes de pushManager.subscribe.
+export async function fetchVapidPublicKey(): Promise<VapidPublicKeyResponse> {
+  const { data } = await api.get<VapidPublicKeyResponse>('/push/vapid-public-key');
+  return data;
 }
 
 export type SubscribePayload = {

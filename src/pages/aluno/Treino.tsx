@@ -81,12 +81,13 @@ export default function AlunoTreino() {
 
   useEffect(() => {
     if (isDemo || !id) return;
-    let cancelled = false;
+    const ctrl = new AbortController();
     setLoading(true);
-    getTreino(id)
-      .then((t) => !cancelled && setTreino(t))
-      .catch((err) => !cancelled && setError(apiErrorMessage(err)))
-      .finally(() => !cancelled && setLoading(false));
+    getTreino(id, { signal: ctrl.signal })
+      .then((t) => { if (!ctrl.signal.aborted) setTreino(t); })
+      .catch((err) => { if (!ctrl.signal.aborted) setError(apiErrorMessage(err)); })
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
+    return () => ctrl.abort();
   }, [id, isDemo]);
 
   const setVariant = (v: WorkoutVariant) => {

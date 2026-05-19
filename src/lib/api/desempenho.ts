@@ -31,9 +31,12 @@ export type Desempenho = {
 };
 
 /** GET /api/aluno/:alunoId/desempenho — agregação de Treino + Strava + RPs. */
-export async function getDesempenho(alunoId?: string): Promise<Desempenho> {
+export async function getDesempenho(
+  alunoId?: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<Desempenho> {
   const path = alunoId ? `/aluno/${alunoId}/desempenho` : '/aluno/desempenho';
-  const { data } = await api.get<Desempenho>(path);
+  const { data } = await api.get<Desempenho>(path, { signal: opts.signal });
   return data;
 }
 

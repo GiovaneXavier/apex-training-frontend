@@ -152,7 +152,8 @@ describe('getStatus — 5 estados', () => {
 
 describe('subscribe — pipeline mockado', () => {
   beforeEach(() => {
-    fetchVapidMock.mockResolvedValue('BTestKey_AAA_BBB_CCC');
+    // PR #36 — fetchVapidPublicKey agora retorna { key, hash }.
+    fetchVapidMock.mockResolvedValue({ key: 'BTestKey_AAA_BBB_CCC', hash: 'placeholder' });
     postSubMock.mockResolvedValue(undefined);
   });
 
@@ -160,5 +161,41 @@ describe('subscribe — pipeline mockado', () => {
     deleteFromWindow('PushManager');
     const { subscribe } = await import('./registerPush');
     await expect(subscribe()).rejects.toMatchObject({ code: 'unsupported' });
+  });
+});
+
+// PR #36 — validação de integridade da VAPID key via SHA-256.
+describe('__internal.sha256Base64Url', () => {
+  it('produz hash base64url determinístico (sem padding)', async () => {
+    const h = await __internal.sha256Base64Url('hello');
+    // SHA-256("hello") = 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+    // base64url = LPJNul-wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ
+    expect(h).toBe('LPJNul-wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ');
+    expect(h.endsWith('=')).toBe(false);
+  });
+
+  it('usa caracteres urlsafe (- e _) em vez de + e /', async () => {
+    const h = await __internal.sha256Base64Url('hello');
+    expect(h.includes('+')).toBe(false);
+    expect(h.includes('/')).toBe(false);
+  });
+});
+
+describe('__internal.fetchAndVerifyVapid — PR #36', () => {
+  it('retorna payload quando hash do server bate com SHA-256(key) computado', async () => {
+    const key = 'BHashOK_xxxxxxxxxxxxx';
+    const validHash = await __internal.sha256Base64Url(key);
+    fetchVapidMock.mockResolvedValue({ key, hash: validHash });
+    const out = await __internal.fetchAndVerifyVapid();
+    expect(out.key).toBe(key);
+    expect(out.hash).toBe(validHash);
+  });
+
+  it('throw com code=hash-mismatch quando hash do server NÃO bate', async () => {
+    fetchVapidMock.mockResolvedValue({ key: 'BAdulterada_xxxxxxxx', hash: 'hash-fake-do-cache' });
+    await expect(__internal.fetchAndVerifyVapid()).rejects.toMatchObject({
+      message: 'VAPID_HASH_MISMATCH',
+      code: 'hash-mismatch',
+    });
   });
 });

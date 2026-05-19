@@ -19,8 +19,12 @@ export type WeeklyCheckinResponse = {
   empty: boolean;
 };
 
-export async function getWeeklyCheckin(): Promise<WeeklyCheckinResponse> {
-  const { data } = await api.get<WeeklyCheckinResponse>('/aluno/weekly-checkin');
+export async function getWeeklyCheckin(
+  opts: { signal?: AbortSignal } = {},
+): Promise<WeeklyCheckinResponse> {
+  const { data } = await api.get<WeeklyCheckinResponse>('/aluno/weekly-checkin', {
+    signal: opts.signal,
+  });
   return data;
 }
 

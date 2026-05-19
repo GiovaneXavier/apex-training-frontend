@@ -37,17 +37,17 @@ export function WeeklyCheckinCard({ className }: Props) {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
+    const ctrl = new AbortController();
     void (async () => {
       try {
-        const data = await getWeeklyCheckin();
-        if (!cancelled) setState({ kind: 'data', data });
+        const data = await getWeeklyCheckin({ signal: ctrl.signal });
+        if (!ctrl.signal.aborted) setState({ kind: 'data', data });
       } catch (err) {
-        if (cancelled || isCancelError(err)) return;
+        if (ctrl.signal.aborted || isCancelError(err)) return;
         setState({ kind: 'error', message: apiErrorMessage(err) });
       }
     })();
-    return () => { cancelled = true; };
+    return () => ctrl.abort();
   }, []);
 
   async function onRefresh() {

@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 /* eslint-disable no-restricted-globals */
 
+import { get as idbGet, set as idbSet } from 'idb-keyval';
 import {
   precacheAndRoute,
   cleanupOutdatedCaches,
@@ -10,6 +11,27 @@ import { registerRoute, NavigationRoute } from 'workbox-routing';
 import { NetworkFirst, StaleWhileRevalidate, CacheFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { CacheableResponsePlugin } from 'workbox-cacheable-response';
+
+// PR #36 — mesma chave usada em registerPush.ts. Mantido duplicado pra
+// evitar import cross-bundle (SW vira chunk próprio no Vite).
+const VAPID_HASH_STORAGE_KEY = 'apex:push:vapid-hash';
+
+function urlBase64ToUint8ArraySW(base64: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+  const normalized = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(normalized);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+async function sha256Base64UrlSW(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  let bin = '';
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
 // PR #26 — SW customizado (injectManifest mode).
 //
@@ -224,12 +246,33 @@ self.addEventListener('pushsubscriptionchange', ((event: Event) => {
     try {
       let newSub = e.newSubscription;
       if (!newSub) {
-        const oldKey = e.oldSubscription?.options?.applicationServerKey;
-        if (!oldKey) return; // sem chave não dá pra resubscribe
+        // PR #36 — em vez de reusar oldKey (potencialmente atrelada a uma
+        // VAPID antiga já rotacionada no server), busca key+hash fresca,
+        // valida integridade e atualiza o cache local. Se mismatch, aborta
+        // — re-subscribe seria com chave corrompida.
+        const res = await fetch('/api/push/vapid-public-key', { credentials: 'include' });
+        if (!res.ok) return;
+        const { key, hash } = (await res.json()) as { key: string; hash: string };
+        const computed = await sha256Base64UrlSW(key);
+        if (computed !== hash) {
+          console.warn('[sw] VAPID hash mismatch — pulando re-subscribe');
+          return;
+        }
         newSub = await self.registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: oldKey,
+          applicationServerKey: urlBase64ToUint8ArraySW(key),
         });
+        await idbSet(VAPID_HASH_STORAGE_KEY, hash);
+      } else {
+        // Browser já forneceu newSubscription: confiamos no PushManager
+        // dele, mas atualizamos o cache pro caso de hash ter mudado.
+        try {
+          const res = await fetch('/api/push/vapid-public-key', { credentials: 'include' });
+          if (res.ok) {
+            const { hash } = (await res.json()) as { hash?: string };
+            if (hash) await idbSet(VAPID_HASH_STORAGE_KEY, hash);
+          }
+        } catch { /* best-effort */ }
       }
 
       // Manda nova sub pro backend. Se o user já tinha cookie válido, o
@@ -248,5 +291,9 @@ self.addEventListener('pushsubscriptionchange', ((event: Event) => {
     }
   })());
 }) as EventListener);
+
+// Suprime "declared but never read" do idbGet (mantido pra evolução futura
+// — leitura de hash anterior antes de decidir se reusa a sub atual).
+void idbGet;
 
 export {};

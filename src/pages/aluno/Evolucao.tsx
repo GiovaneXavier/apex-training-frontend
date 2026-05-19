@@ -152,13 +152,15 @@ export default function AlunoEvolucao() {
   const [usandoMock, setUsandoMock] = useState(false);
 
   // Carrega dados reais do backend; se vazio, usa mocks pra UX.
+  // PR #36 — AbortController cancela request em voo quando o componente
+  // desmonta (não só ignora resposta como a flag `cancelled` antiga fazia).
   useEffect(() => {
     if (!user) return;
-    let cancelled = false;
+    const ctrl = new AbortController();
     setLoading(true);
-    listEvolucoes({ alunoId: user.aluno?.id, limit: 200 })
+    listEvolucoes({ alunoId: user.aluno?.id, limit: 200 }, { signal: ctrl.signal })
       .then((items) => {
-        if (cancelled) return;
+        if (ctrl.signal.aborted) return;
         if (items.length === 0) {
           setTodas(MOCK);
           setUsandoMock(true);
@@ -168,13 +170,15 @@ export default function AlunoEvolucao() {
         }
       })
       .catch((err) => {
-        if (cancelled) return;
+        if (ctrl.signal.aborted) return;
         setError(apiErrorMessage(err));
         setTodas(MOCK);
         setUsandoMock(true);
       })
-      .finally(() => !cancelled && setLoading(false));
-    return () => { cancelled = true; };
+      .finally(() => {
+        if (!ctrl.signal.aborted) setLoading(false);
+      });
+    return () => ctrl.abort();
   }, [user]);
 
   const avaliacoes = useMemo(() => {
