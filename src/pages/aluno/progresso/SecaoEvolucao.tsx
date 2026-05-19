@@ -31,13 +31,13 @@ export function SecaoEvolucao() {
 
   useEffect(() => {
     if (!user?.aluno?.id) return;
-    let cancelled = false;
+    const ctrl = new AbortController();
     setLoading(true);
-    listEvolucoes({ alunoId: user.aluno.id, limit: 200 })
-      .then((data) => !cancelled && setItems(data))
-      .catch((err) => !cancelled && setError(apiErrorMessage(err)))
-      .finally(() => !cancelled && setLoading(false));
-    return () => { cancelled = true; };
+    listEvolucoes({ alunoId: user.aluno.id, limit: 200 }, { signal: ctrl.signal })
+      .then((data) => { if (!ctrl.signal.aborted) setItems(data); })
+      .catch((err) => { if (!ctrl.signal.aborted) setError(apiErrorMessage(err)); })
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
+    return () => ctrl.abort();
   }, [user?.aluno?.id]);
 
   const linhaData = useMemo(() => {

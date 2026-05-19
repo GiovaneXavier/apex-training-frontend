@@ -28,17 +28,17 @@ export function StreakCard({ className }: Props) {
   const [state, setState] = useState<State>({ kind: 'loading' });
 
   useEffect(() => {
-    let cancelled = false;
+    const ctrl = new AbortController();
     void (async () => {
       try {
-        const data = await getStreak();
-        if (!cancelled) setState({ kind: 'ready', data });
+        const data = await getStreak({ signal: ctrl.signal });
+        if (!ctrl.signal.aborted) setState({ kind: 'ready', data });
       } catch (err) {
-        if (cancelled || isCancelError(err)) return;
+        if (ctrl.signal.aborted || isCancelError(err)) return;
         setState({ kind: 'error', message: apiErrorMessage(err) });
       }
     })();
-    return () => { cancelled = true; };
+    return () => ctrl.abort();
   }, []);
 
   if (state.kind === 'loading') {

@@ -42,13 +42,13 @@ export function SecaoDesempenho() {
 
   useEffect(() => {
     if (!user) return;
-    let cancelled = false;
+    const ctrl = new AbortController();
     setLoading(true);
-    getDesempenho()
-      .then((d) => !cancelled && setData(d))
-      .catch((err) => !cancelled && setError(apiErrorMessage(err)))
-      .finally(() => !cancelled && setLoading(false));
-    return () => { cancelled = true; };
+    getDesempenho(undefined, { signal: ctrl.signal })
+      .then((d) => { if (!ctrl.signal.aborted) setData(d); })
+      .catch((err) => { if (!ctrl.signal.aborted) setError(apiErrorMessage(err)); })
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
+    return () => ctrl.abort();
   }, [user]);
 
   if (loading) {

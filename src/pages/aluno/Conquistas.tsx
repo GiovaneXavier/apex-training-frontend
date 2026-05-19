@@ -21,17 +21,17 @@ export default function ConquistasPage() {
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    const ctrl = new AbortController();
     void (async () => {
       try {
-        const r = await listConquistas();
-        if (!cancelled) setData(r);
+        const r = await listConquistas({ signal: ctrl.signal });
+        if (!ctrl.signal.aborted) setData(r);
       } catch (err) {
-        if (cancelled || isCancelError(err)) return;
+        if (ctrl.signal.aborted || isCancelError(err)) return;
         setErro(apiErrorMessage(err));
       }
     })();
-    return () => { cancelled = true; };
+    return () => ctrl.abort();
   }, []);
 
   const desbloqueadas = data?.itens.filter((i) => i.desbloqueada) ?? [];

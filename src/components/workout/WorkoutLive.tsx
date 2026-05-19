@@ -48,8 +48,12 @@ export function WorkoutLive({ treino, theme, density = 'regular' }: Props) {
   // case-sensitive — alinhado com o snapshot gravado no JSON.
   useEffect(() => {
     if (treino.detalhes.tipo !== 'musculacao') return;
+    const ctrl = new AbortController();
     const nomes = treino.detalhes.exercicios.map((e) => e.nome);
-    getHistoricoCargas(nomes).then(setHistorico).catch(() => {});
+    getHistoricoCargas(nomes, { signal: ctrl.signal })
+      .then((h) => { if (!ctrl.signal.aborted) setHistorico(h); })
+      .catch(() => {});
+    return () => ctrl.abort();
   }, [treino.id]);
 
   if (treino.detalhes.tipo !== 'musculacao') {

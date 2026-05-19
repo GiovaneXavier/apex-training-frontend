@@ -71,10 +71,14 @@ export type HistoricoCarga = {
 };
 
 // Mapa { nomeNormalizado(lowercase) -> última execução do aluno }
-export async function getHistoricoCargas(nomes: string[]): Promise<Record<string, HistoricoCarga>> {
+export async function getHistoricoCargas(
+  nomes: string[],
+  opts: { signal?: AbortSignal } = {},
+): Promise<Record<string, HistoricoCarga>> {
   if (nomes.length === 0) return {};
   const { data } = await api.get<Record<string, HistoricoCarga>>('/treinos/historico-cargas', {
     params: { nomes: nomes.join(',') },
+    signal: opts.signal,
   });
   return data;
 }

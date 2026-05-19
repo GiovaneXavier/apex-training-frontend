@@ -31,12 +31,16 @@ export type ConquistasResponse = {
   totalCatalogo: number;
 };
 
-export async function getStreak(): Promise<StreakResponse> {
-  const { data } = await api.get<StreakResponse>('/aluno/streak');
+export async function getStreak(
+  opts: { signal?: AbortSignal } = {},
+): Promise<StreakResponse> {
+  const { data } = await api.get<StreakResponse>('/aluno/streak', { signal: opts.signal });
   return data;
 }
 
-export async function listConquistas(): Promise<ConquistasResponse> {
-  const { data } = await api.get<ConquistasResponse>('/aluno/conquistas');
+export async function listConquistas(
+  opts: { signal?: AbortSignal } = {},
+): Promise<ConquistasResponse> {
+  const { data } = await api.get<ConquistasResponse>('/aluno/conquistas', { signal: opts.signal });
   return data;
 }
