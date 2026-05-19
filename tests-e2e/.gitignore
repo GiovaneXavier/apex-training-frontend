@@ -1,0 +1,7 @@
+# PR #35 — artefatos do Playwright (storageState com cookies de sessão,
+# resultados de run, reports HTML).
+.auth/
+.results/
+.report/
+*.webm
+*.zip
