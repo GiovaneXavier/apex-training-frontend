@@ -1,12 +1,15 @@
+import { get as idbGet, set as idbSet } from 'idb-keyval';
+
 import {
   deleteSubscription as apiDeleteSubscription,
   fetchVapidPublicKey,
   postSubscription,
+  type VapidPublicKeyResponse,
 } from '@/lib/api/push';
 
 // PR #26 — Web Push subscription lifecycle no client.
 //
-// 5 estados expostos via getStatus():
+// 6 estados expostos via getStatus():
 //   unsupported          → browser não fala Web Push (Safari iOS < 16.4
 //                          como tab; outros browsers muito antigos)
 //   ios-needs-install    → Safari iOS detectado MAS PWA não instalado
@@ -15,6 +18,9 @@ import {
 //                          settings do browser
 //   granted-unsubscribed → permissão OK, mas não há subscription ativa
 //   subscribed           → tudo certo
+//   hash-mismatch        → PR #36: SHA-256 da VAPID key não bate com hash
+//                          do server (cache corrompido). Não inscreve;
+//                          UI silenciosa, próximo reload retenta.
 //
 // Detecção iOS é frágil — userAgent sniff é o melhor disponível porque
 // Apple não expõe API decente. Standalone check via display-mode é
@@ -25,7 +31,13 @@ export type PushStatus =
   | 'ios-needs-install'
   | 'denied'
   | 'granted-unsubscribed'
-  | 'subscribed';
+  | 'subscribed'
+  | 'hash-mismatch';
+
+// Chave de cache no IndexedDB com o último hash VAPID associado à
+// subscription ativa. Quando o server rotaciona a chave, este hash fica
+// diferente do hash atual do server — sinal pra unsubscribe e re-subscribe.
+export const VAPID_HASH_STORAGE_KEY = 'apex:push:vapid-hash';
 
 function isIOSSafari(): boolean {
   if (typeof navigator === 'undefined') return false;
@@ -82,6 +94,30 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
   return out;
 }
 
+// PR #36 — SHA-256 base64url da string, via Web Crypto. Espelha o cálculo
+// server-side (`crypto.createHash('sha256').update(key).digest('base64url')`).
+async function sha256Base64Url(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  let bin = '';
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+// PR #36 — busca VAPID key + hash, valida integridade em trânsito.
+// Throw 'hash-mismatch' se o SHA-256 recalculado da chave não bate com o
+// hash devolvido pelo server (cache HTTP/proxy corrompeu o payload).
+async function fetchAndVerifyVapid(): Promise<VapidPublicKeyResponse> {
+  const payload = await fetchVapidPublicKey();
+  const computed = await sha256Base64Url(payload.key);
+  if (computed !== payload.hash) {
+    const err = new Error('VAPID_HASH_MISMATCH');
+    (err as Error & { code: string }).code = 'hash-mismatch';
+    throw err;
+  }
+  return payload;
+}
+
 /**
  * Pede permissão (se necessário), assina no PushManager, manda pro
  * backend. Idempotente: se já subscrito, retorna o estado atual sem
@@ -114,14 +150,39 @@ export async function subscribe(): Promise<PushStatus> {
   const reg = await navigator.serviceWorker.ready;
   let sub = await reg.pushManager.getSubscription();
 
+  // PR #36 — fetch + valida hash ANTES de qualquer subscribe/getSubscription.
+  // Se mismatch (cache corrompido), aborta sem mexer no PushManager.
+  let vapid: VapidPublicKeyResponse;
+  try {
+    vapid = await fetchAndVerifyVapid();
+  } catch (err) {
+    if ((err as Error & { code?: string }).code === 'hash-mismatch') {
+      return 'hash-mismatch';
+    }
+    throw err;
+  }
+
+  // PR #36 — rotação de chave: se o hash armazenado é diferente do hash
+  // atual, a subscription cacheada está atrelada à VAPID antiga.
+  // Unsubscribe primeiro pra forçar re-subscribe abaixo com a nova
+  // applicationServerKey. Sem isto, server não consegue enviar push
+  // (web-push falha com auth error ou Push Service responde 410).
+  if (sub) {
+    const cachedHash = await idbGet<string>(VAPID_HASH_STORAGE_KEY);
+    if (cachedHash && cachedHash !== vapid.hash) {
+      try { await apiDeleteSubscription(sub.endpoint); } catch { /* best-effort */ }
+      await sub.unsubscribe();
+      sub = null;
+    }
+  }
+
   if (!sub) {
-    const vapidKey = await fetchVapidPublicKey();
     sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
       // applicationServerKey aceita BufferSource em runtime; o lib.dom
       // tipa estrito demais (não aceita Uint8Array<ArrayBufferLike>).
       // Cast aqui é seguro — a função produz Uint8Array com ArrayBuffer.
-      applicationServerKey: urlBase64ToUint8Array(vapidKey) as unknown as BufferSource,
+      applicationServerKey: urlBase64ToUint8Array(vapid.key) as unknown as BufferSource,
     });
   }
 
@@ -142,6 +203,11 @@ export async function subscribe(): Promise<PushStatus> {
     keys: { p256dh: subJson.keys.p256dh, auth: subJson.keys.auth },
     userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
   });
+
+  // PR #36 — fonte da verdade local: hash da VAPID key usada nesta sub.
+  // Próximo subscribe() compara este valor com o hash do server pra detectar
+  // rotação e re-inscrever automaticamente.
+  await idbSet(VAPID_HASH_STORAGE_KEY, vapid.hash);
 
   return 'subscribed';
 }
@@ -170,4 +236,4 @@ export async function unsubscribe(): Promise<PushStatus> {
 }
 
 // Exports só pra testes.
-export const __internal = { urlBase64ToUint8Array, isIOSSafari, isStandalonePWA };
+export const __internal = { urlBase64ToUint8Array, isIOSSafari, isStandalonePWA, sha256Base64Url, fetchAndVerifyVapid };
