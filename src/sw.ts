@@ -260,7 +260,11 @@ self.addEventListener('pushsubscriptionchange', ((event: Event) => {
         }
         newSub = await self.registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8ArraySW(key),
+          // Cast: lib.dom tipa applicationServerKey como BufferSource
+          // estrito (ArrayBufferView<ArrayBuffer>), mas Uint8Array<
+          // ArrayBufferLike> é aceito em runtime. Mesmo cast usado em
+          // registerPush.ts:124.
+          applicationServerKey: urlBase64ToUint8ArraySW(key) as unknown as BufferSource,
         });
         await idbSet(VAPID_HASH_STORAGE_KEY, hash);
       } else {
