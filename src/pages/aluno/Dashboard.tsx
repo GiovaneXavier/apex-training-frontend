@@ -13,6 +13,8 @@ import { listTreinos } from '@/lib/api/treinos';
 import { iniciarTreinoDeRotina, listRotinas, type DiaSemana, type Rotina } from '@/lib/api/rotinas';
 import { listProvas } from '@/lib/api/provas';
 import { ProximaProvaWidget } from '@/components/aluno/ProximaProvaWidget';
+import { StreakCard } from '@/components/aluno/StreakCard';
+import { WeeklyCheckinCard } from '@/components/aluno/WeeklyCheckinCard';
 import {
   buildStravaAuthUrl, getStravaStatus, syncStrava,
   type StravaStatus,
@@ -244,6 +246,22 @@ export default function AlunoDashboard() {
           {loadError}
         </div>
       )}
+
+      {/* PR #31 — Streak card (Sprint 11 / Gamificação). Posicionado
+          ANTES do countdown da prova pra ser primeiro elemento visual
+          após o header — reforço positivo de consistência. Click leva
+          pra estante de conquistas. */}
+      <div className="px-5 mb-3">
+        <StreakCard />
+      </div>
+
+      {/* PR #32 — Weekly Check-in (Sprint 12 / Aluno Intelligence).
+          Insight narrativo retroativo gerado por IA com cache TTL 7d.
+          Logo abaixo do StreakCard pra fechar o "fechamento da semana"
+          visualmente: consistência (Streak) + narrativa (Check-in). */}
+      <div className="px-5 mb-3">
+        <WeeklyCheckinCard />
+      </div>
 
       {/* PR #21 — countdown da prova alvo. Posicionado imediatamente
           após o header pra ser o primeiro elemento visual abaixo do

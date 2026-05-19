@@ -1,5 +1,7 @@
 import axios, { AxiosError } from 'axios';
 
+import { captureNetworkError } from '@/lib/sentry';
+
 // PR #5: token JWT migrou para cookie HttpOnly (não-acessível ao JS).
 // Não há mais TOKEN_KEY em localStorage. O CSRF token vive em memória
 // e é setado por AuthContext após /auth/login e /auth/me.
@@ -45,6 +47,19 @@ api.interceptors.response.use(
       csrfToken = null;
       window.dispatchEvent(new CustomEvent('apex:logout'));
     }
+
+    // PR #34 — Captura ERR_NETWORK / timeout / CORS no Sentry com
+    // contexto enriquecido. Erros COM response (4xx/5xx) NÃO entram
+    // aqui — são tratados pelo backend Sentry. Aqui só falhas de
+    // transporte que o backend nunca vê.
+    if (axios.isAxiosError(err) && !err.response) {
+      captureNetworkError(err, {
+        url: err.config?.url,
+        method: err.config?.method?.toUpperCase(),
+        code: err.code,
+      });
+    }
+
     return Promise.reject(err);
   },
 );

@@ -36,6 +36,7 @@ const AlunoPerfil = lazy(() => import('./pages/aluno/Perfil'));
 const AlunoEvolucao = lazy(() => import('./pages/aluno/Evolucao'));
 const AlunoEvolucaoNova = lazy(() => import('./pages/aluno/EvolucaoNova'));
 const AlunoProgresso = lazy(() => import('./pages/aluno/Progresso'));
+const AlunoConquistas = lazy(() => import('./pages/aluno/Conquistas'));
 
 const ProfDashboard = lazy(() => import('./pages/professor/Dashboard'));
 const ProfAlunos = lazy(() => import('./pages/professor/Alunos'));
@@ -105,6 +106,10 @@ export default function App() {
         <Route
           path="/aluno/rps"
           element={<ProtectedRoute roles={['ALUNO']}><AlunoRPs /></ProtectedRoute>}
+        />
+        <Route
+          path="/aluno/conquistas"
+          element={<ProtectedRoute roles={['ALUNO']}><AlunoConquistas /></ProtectedRoute>}
         />
         <Route
           path="/aluno/perfil"

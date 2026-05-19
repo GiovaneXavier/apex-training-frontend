@@ -25,12 +25,37 @@ import type { SalvarPayload } from '@/lib/api/execucao';
 
 const KEY_PREFIX = 'apex.offline.exec.';
 
-export type QueueEntry = {
-  id: string;             // uuid local — chave estável para remoção idempotente
+// PR #25 — fila híbrida: salvar execucao + voice diary pending.
+// kind discrimina o tipo; drain processa cada um diferente. Default
+// 'salvar' mantém retrocompat com entries pré-PR #25 (que não tinham kind).
+
+export type SalvarQueueEntry = {
+  id: string;
+  kind?: 'salvar';        // default — entries antigas sem campo são salvar
   treinoId: string;
   payload: SalvarPayload;
-  enqueuedAt: string;     // ISO timestamp — útil para auditoria e ordenação
+  enqueuedAt: string;
 };
+
+export type VoiceQueueEntry = {
+  id: string;
+  kind: 'voice_pending';
+  treinoId: string;
+  audioBase64: string;    // blob → base64 pra sobreviver no IDB (JSON-safe)
+  audioMime: string;
+  enqueuedAt: string;
+};
+
+export type QueueEntry = SalvarQueueEntry | VoiceQueueEntry;
+
+export function isVoiceEntry(e: QueueEntry): e is VoiceQueueEntry {
+  return (e as VoiceQueueEntry).kind === 'voice_pending';
+}
+
+export function isSalvarEntry(e: QueueEntry): e is SalvarQueueEntry {
+  // entries antigas (sem kind) também são salvar
+  return !isVoiceEntry(e);
+}
 
 function isEntryKey(k: unknown): k is string {
   return typeof k === 'string' && k.startsWith(KEY_PREFIX);
@@ -48,15 +73,57 @@ function genId(): string {
 export async function enqueueSaveExecucao(
   treinoId: string,
   payload: SalvarPayload,
-): Promise<QueueEntry> {
-  const entry: QueueEntry = {
+): Promise<SalvarQueueEntry> {
+  const entry: SalvarQueueEntry = {
     id: genId(),
+    kind: 'salvar',
     treinoId,
     payload,
     enqueuedAt: new Date().toISOString(),
   };
   await set(KEY_PREFIX + entry.id, entry);
   return entry;
+}
+
+// PR #25 — enfileira áudio gravado offline. Drain (useOfflineSync) chama
+// parseBjjAudio quando rede volta e persiste resultado em voiceDrafts pra
+// que JiuJitsuLive possa hidratar mesmo se desmontado entre gravação e
+// processamento.
+export async function enqueueVoicePending(
+  treinoId: string,
+  audioBlob: Blob,
+): Promise<VoiceQueueEntry> {
+  const audioBase64 = await blobToBase64(audioBlob);
+  const entry: VoiceQueueEntry = {
+    id: genId(),
+    kind: 'voice_pending',
+    treinoId,
+    audioBase64,
+    audioMime: audioBlob.type || 'audio/webm',
+    enqueuedAt: new Date().toISOString(),
+  };
+  await set(KEY_PREFIX + entry.id, entry);
+  return entry;
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const buf = await blob.arrayBuffer();
+  // Conversão chunked pra evitar stack overflow em buffers maiores
+  // (apply(null, arr) estoura se arr.length > ~120k em alguns engines).
+  const bytes = new Uint8Array(buf);
+  const CHUNK = 0x8000;
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)));
+  }
+  return btoa(bin);
+}
+
+export function base64ToBlob(base64: string, mime: string): Blob {
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
 }
 
 export async function listQueue(): Promise<QueueEntry[]> {
