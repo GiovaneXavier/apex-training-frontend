@@ -66,22 +66,35 @@ jobs:
       - name: Checkout frontend
         uses: actions/checkout@v4
 
+      # Resolve a ref do backend ANTES do checkout. Se a branch do PR
+      # existir no backend (work coordenado em ambos repos), usa ela.
+      # Senão, cai pra main. Antes era 2 steps de checkout encadeados
+      # com `if: failure()` — caminho frágil: o segundo checkout reusava
+      # path=backend já inicializado pelo primeiro e batia em
+      # "fatal: ambiguous argument 'HEAD'" antes de recriar o dir.
+      - name: Resolve backend ref
+        id: backend-ref
+        env:
+          GH_TOKEN: ${{ secrets.BACKEND_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          PR_REF="${{ github.head_ref || github.ref_name }}"
+          URL="https://x-access-token:${GH_TOKEN}@github.com/GiovaneXavier/apex-training-backend.git"
+          git ls-remote --exit-code --heads "$URL" "$PR_REF" > /dev/null 2>&1
+          if [ $? -eq 0 ]; then
+            echo "Backend tem branch '$PR_REF' — usando."
+            echo "ref=$PR_REF" >> "$GITHUB_OUTPUT"
+          else
+            echo "Backend não tem branch '$PR_REF' — fallback main."
+            echo "ref=main" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout backend (repo separado)
         uses: actions/checkout@v4
         with:
           repository: GiovaneXavier/apex-training-backend
           path: backend
-          # Match a branch do PR sempre que possível; fallback main.
-          ref: ${{ github.head_ref || github.ref_name }}
-          token: ${{ secrets.BACKEND_REPO_TOKEN || secrets.GITHUB_TOKEN }}
-
-      - name: Checkout backend (fallback main se ref não existir)
-        if: failure()
-        uses: actions/checkout@v4
-        with:
-          repository: GiovaneXavier/apex-training-backend
-          path: backend
-          ref: main
+          ref: ${{ steps.backend-ref.outputs.ref }}
           token: ${{ secrets.BACKEND_REPO_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
