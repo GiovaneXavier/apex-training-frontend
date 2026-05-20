@@ -23,6 +23,8 @@ import { FormCiclismo } from '@/components/professor/forms/FormCiclismo';
 import { FormCorrida } from '@/components/professor/forms/FormCorrida';
 import { FormHyrox } from '@/components/professor/forms/FormHyrox';
 import { FormMusculacao } from '@/components/professor/forms/FormMusculacao';
+// PR #39 (Sprint 14) — contexto Race A do aluno no "cockpit" do coach.
+import { ProvaAlvoBanner } from '@/components/professor/ProvaAlvoBanner';
 import type { DraftTreinoResponse } from '@/lib/api/aiDraft';
 
 // PR #30 — AIDraftModal lazy. Chunk separado: só baixa quando coach
@@ -285,10 +287,19 @@ export default function ProfPrescrever() {
                 ))}
               </select>
               {alunoSelecionado && (
-                <div className="text-[11px] text-ink-subtle -mt-2 mb-4">
+                <div className="text-[11px] text-ink-subtle -mt-2 mb-2">
                   {alunoSelecionado.email}
                 </div>
               )}
+
+              {/* PR #39 — banner passivo da Race A do aluno selecionado.
+                  Simetria de vocabulário com o Dashboard do aluno: mesma
+                  fase, mesma cor, mesmas fronteiras temporais. Sem aluno
+                  selecionado, banner não renderiza (null).
+                  Aviso de colisão (volume vs fase) fica pra IA do Coach
+                  no PR seguinte — gancho onFaseChange já está plantado. */}
+              <ProvaAlvoBanner alunoId={alunoId} className="mb-4" />
+
 
               <Field
                 label="Título"
