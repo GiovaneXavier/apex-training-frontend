@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProximaProvaWidget, faseMacrociclo } from './ProximaProvaWidget';
+import type { Prova } from '@/types/treino';
 
 // PR #21 — testes originais de UI/buckets.
 // PR #38 (Sprint 14) — estendidos pra cobrir 5 fases progressivas do
@@ -11,22 +12,26 @@ import { ProximaProvaWidget, faseMacrociclo } from './ProximaProvaWidget';
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/api/provas', () => ({ criarProva: vi.fn() }));
 
-const PROVA_BASE = {
+// Anotar como Prova — sem isso, `alvoTempo: null` e `local: null` inferiam
+// tipo literal `null` (não `string | null`), e o `Partial<typeof PROVA_BASE>`
+// rejeitava strings passadas via `extras`. tsc no build prod pegou; vitest
+// local não. Fix do build do Vercel.
+const PROVA_BASE: Prova = {
   id: 'p-1',
   alunoId: 'a-1',
-  modalidade: 'CORRIDA' as const,
+  modalidade: 'CORRIDA',
   nome: 'Meia de Floripa',
   detalhes: {},
-  // PR #37 — campos novos no tipo Prova
-  prioridade: 'A' as const,
+  prioridade: 'A',
   arquivada: false,
   alvoTempo: null,
   local: null,
+  data: new Date().toISOString(),
   criadoEm: new Date().toISOString(),
   atualizadoEm: new Date().toISOString(),
 };
 
-function provaDaqui(dias: number, extras: Partial<typeof PROVA_BASE> = {}) {
+function provaDaqui(dias: number, extras: Partial<Prova> = {}): Prova {
   const d = new Date();
   d.setHours(9, 0, 0, 0);
   d.setDate(d.getDate() + dias);
