@@ -87,5 +87,10 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // PR #38/#39 — Vitest não deve tentar carregar specs Playwright
+    // (eles importam @playwright/test e quebram o resolver). E2E roda
+    // separado via `npm run test:e2e`. Mesma exclusão será aplicada pelo
+    // PR #38; ficar idempotente aqui evita teste vermelho desta branch.
+    exclude: ['node_modules', 'dist', 'tests-e2e/**'],
   },
 });
