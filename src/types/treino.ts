@@ -343,14 +343,24 @@ export type Treino = {
   atualizadoEm: string;
 };
 
+// PR #37 (Sprint 14) — Macro-ciclo Race A/B/C.
+export type ProvaPrioridade = 'A' | 'B' | 'C';
+
 export type Prova = {
   id: string;
   alunoId: string;
   modalidade: Modalidade;
   nome: string;
   data: string;
+  // PR #37 — campos novos. Têm default no backend, então provas antigas
+  // do banco vêm com prioridade='C' e arquivada=false.
+  prioridade: ProvaPrioridade;
+  arquivada: boolean;
+  alvoTempo: string | null;
+  local: string | null;
   detalhes: Record<string, unknown>;
   criadoEm: string;
+  atualizadoEm: string;
 };
 
 // ── Helpers ────────────────────────────────────────────────────

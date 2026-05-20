@@ -11,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { apiErrorMessage, isCancelError } from '@/lib/api';
 import { listTreinos } from '@/lib/api/treinos';
 import { iniciarTreinoDeRotina, listRotinas, type DiaSemana, type Rotina } from '@/lib/api/rotinas';
-import { listProvas } from '@/lib/api/provas';
+import { getProvaAlvo } from '@/lib/api/provas';
 import { ProximaProvaWidget } from '@/components/aluno/ProximaProvaWidget';
 import { StreakCard } from '@/components/aluno/StreakCard';
 import { WeeklyCheckinCard } from '@/components/aluno/WeeklyCheckinCard';
@@ -38,9 +38,11 @@ export default function AlunoDashboard() {
   const [treinos, setTreinos] = useState<Treino[]>([]);
   const [rotinas, setRotinas] = useState<Rotina[]>([]);
   const [strava, setStrava] = useState<StravaStatus | null>(null);
-  // PR #21 — próxima prova alvo (countdown). Fetch fora do Promise.all
-  // principal pra falha de prova não derrubar treinos/rotinas.
-  const [proximaProva, setProximaProva] = useState<Prova | null>(null);
+  // PR #21 — countdown da prova alvo no Dashboard.
+  // PR #38 — passou a consumir GET /provas/:alunoId/alvo (Race A ativa).
+  // Fetch fora do Promise.all principal pra falha de prova não derrubar
+  // treinos/rotinas — feature secundária.
+  const [provaAlvo, setProvaAlvo] = useState<Prova | null>(null);
   const [loading, setLoading] = useState(true);
   // Feedbacks transientes (erros de sync, msgs de sucesso) agora via Sonner.
   // `loadError` mantido só pra erro de carregamento da página (banner inline).
@@ -85,14 +87,16 @@ export default function AlunoDashboard() {
       setRotinas(r);
       if (s) setStrava(s);
 
-      // PR #21 — próxima prova alvo. Fetch isolado pra não bloquear
-      // o resto se /provas falhar; provas é feature secundária.
-      // `desde=agora` filtra só provas futuras; `limit=1` é suficiente
-      // pro widget (próxima é o que importa).
-      const agora = new Date().toISOString();
-      listProvas(user.aluno.id, { desde: agora, limit: 1 })
-        .then((provas) => setProximaProva(provas[0] ?? null))
-        .catch(() => {
+      // PR #38 — Race A ativa via endpoint dedicado (substitui
+      // listProvas({desde:agora, limit:1}) do PR #21). Vantagens:
+      //   - backend retorna explicitamente a prova com prioridade='A'
+      //     e arquivada=false (sem ambiguidade "próxima é a alvo?").
+      //   - menos dado trafegado.
+      // Fetch isolado — silencioso em erro, widget mostra estado vazio.
+      getProvaAlvo(user.aluno.id, { signal })
+        .then((alvo) => setProvaAlvo(alvo))
+        .catch((e) => {
+          if (isCancelError(e)) return;
           // silencioso — widget mostra estado vazio
         });
     } catch (err) {
@@ -247,10 +251,19 @@ export default function AlunoDashboard() {
         </div>
       )}
 
-      {/* PR #31 — Streak card (Sprint 11 / Gamificação). Posicionado
-          ANTES do countdown da prova pra ser primeiro elemento visual
-          após o header — reforço positivo de consistência. Click leva
-          pra estante de conquistas. */}
+      {/* PR #38 (Sprint 14) — countdown da Race A ativa. Promovido a
+          elemento HERÓI do Dashboard, ACIMA de StreakCard e Weekly
+          Check-in. Visão psicológica do macrociclo é o gatilho mais
+          forte pra acordar cedo treinar — vai primeiro.
+          Sem Race A, mostra CTA discreto pra definir alvo. */}
+      <ProximaProvaWidget
+        prova={provaAlvo}
+        onCriada={(p) => setProvaAlvo(p)}
+      />
+
+      {/* PR #31 — Streak card (Sprint 11 / Gamificação). Reforço
+          positivo de consistência semanal. Click leva pra estante
+          de conquistas. */}
       <div className="px-5 mb-3">
         <StreakCard />
       </div>
@@ -262,14 +275,6 @@ export default function AlunoDashboard() {
       <div className="px-5 mb-3">
         <WeeklyCheckinCard />
       </div>
-
-      {/* PR #21 — countdown da prova alvo. Posicionado imediatamente
-          após o header pra ser o primeiro elemento visual abaixo do
-          nome. Sem alvo cadastrado, mostra CTA discreto. */}
-      <ProximaProvaWidget
-        prova={proximaProva}
-        onCriada={(p) => setProximaProva(p)}
-      />
 
 
       {/* ── Navegação de semana ─────────────────────────────────── */}
