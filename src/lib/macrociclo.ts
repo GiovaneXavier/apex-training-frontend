@@ -34,14 +34,25 @@ export function faseMacrociclo(dias: number): FaseMacrociclo {
   return 'base';
 }
 
+// Extrai YYYY-MM-DD da ISO string e cria Date local. Evita o shift de
+// fuso horário que aconteceria em `new Date(iso)` quando o servidor
+// grava em UTC e o cliente vive em outro TZ (ex: atleta em SP grava
+// prova pro dia 29; coach em Tóquio veria 28 com `setHours(0)` clássico).
+// Defensivo: se a string não tem 'T' (ex: "2026-08-29" puro), o split
+// ainda funciona — pega tudo antes do primeiro T (ou a string toda).
+function isoParaDataLocal(iso: string): Date {
+  const datePart = iso.split('T')[0];
+  const [year, month, day] = datePart.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 // Mede DIAS-CIVIS de hoje até o dia da prova (não horas). Garante
 // que "hoje" mostre 0 mesmo se a prova for às 23h, e que "amanhã"
 // mostre 1 mesmo se for às 01h.
 export function diasAteIso(iso: string): number {
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
-  const alvo = new Date(iso);
-  alvo.setHours(0, 0, 0, 0);
+  const alvo = isoParaDataLocal(iso);
   return Math.round((alvo.getTime() - hoje.getTime()) / 86_400_000);
 }
 
@@ -66,6 +77,8 @@ export function displayCountdown(dias: number): { numero: string; unidade: strin
 const MESES_CURTO = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
 export function fmtDataCurta(iso: string): string {
-  const d = new Date(iso);
+  // Mesmo cuidado de TZ que diasAteIso — usa o YYYY-MM-DD da string,
+  // não a interpretação local do timestamp UTC.
+  const d = isoParaDataLocal(iso);
   return `${d.getDate()}/${MESES_CURTO[d.getMonth()]}`;
 }

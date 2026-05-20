@@ -173,4 +173,46 @@ describe('ProvaAlvoBanner — onFaseChange (gancho IA do Coach)', () => {
     rerender(<ProvaAlvoBanner alunoId="" onFaseChange={onFaseChange} />);
     expect(onFaseChange).toHaveBeenLastCalledWith(null, null, null);
   });
+
+  // PR #39 — fix Gemini review #3 (Latest Ref Pattern anti-stale-closure).
+  // Antes: caller que não memoizava a fn deixava o useEffect chamando a
+  // versão velha após re-render do pai. Agora: ref aponta sempre pro
+  // último valor; o último callback é chamado quando o fetch resolve.
+  it('chama a versão MAIS RECENTE de onFaseChange (sem stale closure)', async () => {
+    // Mock que segura o resolve até liberarmos explicitamente — simula
+    // pai re-renderizar com nova fn ENQUANTO fetch está em voo.
+    let liberar: (v: unknown) => void = () => undefined;
+    const pendente = new Promise((resolve) => { liberar = resolve; });
+    getProvaAlvoMock.mockReturnValue(pendente);
+
+    const callbackAntigo = vi.fn();
+    const callbackNovo = vi.fn();
+
+    const { rerender } = render(
+      <ProvaAlvoBanner alunoId="a-1" onFaseChange={callbackAntigo} />,
+    );
+
+    // Pai re-render com fn nova ANTES do fetch resolver.
+    rerender(
+      <ProvaAlvoBanner alunoId="a-1" onFaseChange={callbackNovo} />,
+    );
+
+    // Libera o fetch — banner deve chamar a fn NOVA, não a antiga.
+    liberar({
+      id: 'p-1', alunoId: 'a-1', modalidade: 'CORRIDA',
+      nome: 'X', data: new Date(Date.now() + 30 * 86400000).toISOString(),
+      prioridade: 'A', arquivada: false, alvoTempo: null, local: null,
+      detalhes: {}, criadoEm: '', atualizadoEm: '',
+    });
+
+    await waitFor(() => {
+      expect(callbackNovo).toHaveBeenCalled();
+    });
+    // Latest Ref Pattern: o callback OLD nunca dispara com fase carregada.
+    expect(callbackAntigo).not.toHaveBeenCalledWith(
+      expect.stringMatching(/peak|taper|race/),
+      expect.any(Number),
+      expect.any(Object),
+    );
+  });
 });

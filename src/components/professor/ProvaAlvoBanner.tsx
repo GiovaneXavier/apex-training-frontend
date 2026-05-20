@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { getProvaAlvo } from '@/lib/api/provas';
 import { cn } from '@/lib/utils';
@@ -60,10 +60,20 @@ export function ProvaAlvoBanner({ alunoId, onFaseChange, className }: Props) {
     alunoId ? { kind: 'loading', alunoId } : { kind: 'idle' },
   );
 
+  // PR #39 (Gemini review) — Latest Ref Pattern pro `onFaseChange`.
+  // Antes mantíamos fora das deps do useEffect com a convenção
+  // "caller usa useCallback se muda". Convenção frágil: se o pai
+  // re-renderizar passando uma fn não-memoizada, o useEffect usava
+  // a versão do último mount (stale closure). Ref sempre aponta pro
+  // último valor → o efeito permanece dependente APENAS de `alunoId`
+  // (não refetch ao redefinir o callback).
+  const onFaseChangeRef = useRef(onFaseChange);
+  onFaseChangeRef.current = onFaseChange;
+
   useEffect(() => {
     if (!alunoId) {
       setState({ kind: 'idle' });
-      onFaseChange?.(null, null, null);
+      onFaseChangeRef.current?.(null, null, null);
       return;
     }
 
@@ -75,23 +85,23 @@ export function ProvaAlvoBanner({ alunoId, onFaseChange, className }: Props) {
         if (ctrl.signal.aborted) return;
         if (!alvo) {
           setState({ kind: 'sem-alvo', alunoId });
-          onFaseChange?.(null, null, null);
+          onFaseChangeRef.current?.(null, null, null);
           return;
         }
         const dias = diasAteIso(alvo.data);
         const fase = faseMacrociclo(dias);
         setState({ kind: 'ready', alunoId, alvo, dias, fase });
-        onFaseChange?.(fase, dias, alvo);
+        onFaseChangeRef.current?.(fase, dias, alvo);
       })
       .catch((err) => {
         if (ctrl.signal.aborted || (err as { code?: string })?.code === 'ERR_CANCELED') return;
         setState({ kind: 'erro', alunoId });
-        onFaseChange?.(null, null, null);
+        onFaseChangeRef.current?.(null, null, null);
       });
 
     return () => ctrl.abort();
-    // onFaseChange é estável por convenção (caller usa useCallback se
-    // muda) — deixar fora das deps evita re-fetch ao redefinir.
+    // Deps intencionalmente só `alunoId` — `onFaseChange` é lido via ref
+    // pra evitar stale closure SEM re-disparar fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alunoId]);
 
