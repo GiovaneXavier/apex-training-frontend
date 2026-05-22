@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -9,14 +9,15 @@ import { inicioSemana, key as dayKey, comHoraAtual } from '@/lib/dates';
 import { WorkoutDayCard, RestDayCard } from '@/components/aluno/WorkoutDayCard';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiErrorMessage, isCancelError } from '@/lib/api';
-import { listTreinos } from '@/lib/api/treinos';
+import { listTreinos, ackStravaAutoMatch } from '@/lib/api/treinos';
 import { iniciarTreinoDeRotina, listRotinas, type DiaSemana, type Rotina } from '@/lib/api/rotinas';
 import { getProvaAlvo } from '@/lib/api/provas';
 import { ProximaProvaWidget } from '@/components/aluno/ProximaProvaWidget';
 import { StreakCard } from '@/components/aluno/StreakCard';
 import { WeeklyCheckinCard } from '@/components/aluno/WeeklyCheckinCard';
+import { StravaSugestaoCard } from '@/components/aluno/StravaSugestaoCard';
 import {
-  buildStravaAuthUrl, getStravaStatus, syncStrava,
+  buildStravaAuthUrl, desfazerMatchStrava, getStravaStatus, syncStrava,
   type StravaStatus,
 } from '@/lib/api/strava';
 import type { Treino, Prova } from '@/types/treino';
@@ -49,6 +50,11 @@ export default function AlunoDashboard() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [iniciandoId, setIniciandoId] = useState<string | null>(null);
+  // PR #41c — IDs de treinos Tier 1 cujo toast já foi disparado nesta sessão.
+  // Backend marca ack=true após o POST /treinos/strava-ack, mas há latência
+  // entre o toast e o reflexo no próximo fetch — este ref evita disparar o
+  // mesmo toast duas vezes durante carrega() em sequência.
+  const tier1ToastedRef = useRef<Set<string>>(new Set());
 
   const semanaFim = useMemo(() => {
     const f = new Date(semanaInicio);
@@ -87,6 +93,15 @@ export default function AlunoDashboard() {
       setRotinas(r);
       if (s) setStrava(s);
 
+      // PR #41c — Toast de auto-match Tier 1.
+      // Backend grava `stravaAutoMatchAck=false` no webhook quando faz
+      // vínculo automático (score ≥ 0.92). Aqui filtramos os que ainda
+      // não foram exibidos nesta sessão e disparamos o toast com action
+      // "Desfazer" (apenas quando é exatamente 1 — N>1 a undo individual
+      // fica na tela de detalhes do treino). ACK em batch logo depois
+      // garante que reload/cross-device não re-dispare.
+      if (!signal?.aborted) dispararToastTier1(t);
+
       // PR #38 — Race A ativa via endpoint dedicado (substitui
       // listProvas({desde:agora, limit:1}) do PR #21). Vantagens:
       //   - backend retorna explicitamente a prova com prioridade='A'
@@ -119,6 +134,58 @@ export default function AlunoDashboard() {
     return () => ctrl.abort();
     /* eslint-disable-next-line */
   }, [user?.aluno?.id, semanaInicio.getTime()]);
+
+  // PR #41c — detecta auto-matches Tier 1 não vistos e dispara toast.
+  // Fluxo:
+  //   1. Filtra treinos com `stravaActivityId && !stravaAutoMatchAck`
+  //      ignorando os já apresentados nesta sessão (ref).
+  //   2. Marca como apresentados ANTES do toast pra evitar duplo-disparo
+  //      em renders concorrentes.
+  //   3. Dispara toast + ACK em batch (fire-and-forget — falha no ACK
+  //      não bloqueia UX, no máximo aluno vê toast 2x em sessões diferentes).
+  function dispararToastTier1(listaTreinos: Treino[]) {
+    const pendentes = listaTreinos.filter(
+      (t) => t.stravaActivityId && !t.stravaAutoMatchAck && !tier1ToastedRef.current.has(t.id),
+    );
+    if (pendentes.length === 0) return;
+    const ids = pendentes.map((t) => t.id);
+    ids.forEach((id) => tier1ToastedRef.current.add(id));
+
+    if (pendentes.length === 1) {
+      const treino = pendentes[0];
+      toast.success(`"${treino.titulo}" autopreenchido pelo Strava`, {
+        duration: 8000,
+        action: {
+          label: 'Desfazer',
+          onClick: () => {
+            void (async () => {
+              try {
+                await desfazerMatchStrava(treino.id);
+                // Remove do ref pra permitir re-toast caso o aluno re-vincule
+                // depois (improvável, mas mantém o ref consistente com o DB).
+                tier1ToastedRef.current.delete(treino.id);
+                toast.success('Vínculo desfeito');
+                await carregar();
+              } catch (err) {
+                toast.error(apiErrorMessage(err));
+              }
+            })();
+          },
+        },
+      });
+    } else {
+      toast.success(`${pendentes.length} treinos autopreenchidos pelo Strava`, {
+        duration: 8000,
+        description: 'Veja em cada treino para desfazer individualmente',
+      });
+    }
+
+    // ACK em batch, fire-and-forget. Falha vira warn no console — não
+    // quebra UX, no máximo o toast aparece de novo em outra sessão.
+    void ackStravaAutoMatch(ids).catch((err) => {
+      console.warn('[strava-ack] falhou:', err);
+    });
+  }
 
   // ─── Mapas para a fita + feed ────────────────────────────────
   const treinosByDay = useMemo(() => {
@@ -276,6 +343,10 @@ export default function AlunoDashboard() {
         <WeeklyCheckinCard />
       </div>
 
+      {/* PR #41c — Sugestões Strava Tier 2 pendentes (matches retidos
+          aguardando opt-in). Card renderiza `null` quando lista vazia,
+          então não polui o Dashboard quando não há ação. */}
+      <StravaSugestaoCard />
 
       {/* ── Navegação de semana ─────────────────────────────────── */}
       <div className="px-5 flex items-center justify-between mb-1">

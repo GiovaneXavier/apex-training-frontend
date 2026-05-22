@@ -1,4 +1,5 @@
 import { api } from '@/lib/api';
+import type { Modalidade, StatusTreino } from '@/types/treino';
 
 export type AtividadeStrava = {
   id: string;
@@ -50,6 +51,67 @@ export async function syncStrava(): Promise<SyncResult> {
 export async function listAtividadesStrava(alunoId: string, limit = 20): Promise<AtividadeStrava[]> {
   const { data } = await api.get<{ atividades: AtividadeStrava[] }>(`/strava/atividades/${alunoId}`, { params: { limit } });
   return data.atividades;
+}
+
+// ── PR #41b — Sugestões Tier 2 + #41c UI ────────────────────────
+//
+// Tier 2 = backend retém matches 0.65 ≤ score < 0.92 como StravaSugestao
+// PENDENTE aguardando opt-in do aluno. Dashboard lista e oferece [Sim]/[Não].
+
+// Espelha o backend listarSugestoesPendentes (stravaMatch.service.js) —
+// include traz subconjunto do Treino e AtividadeStrava para o render do card.
+export type StravaSugestaoTreino = {
+  id: string;
+  titulo: string;
+  modalidade: Modalidade;
+  dataAlvo: string;
+  status: StatusTreino;
+};
+
+export type StravaSugestaoAtividade = {
+  id: string;
+  stravaId: string;
+  tipo: string;
+  nome: string;
+  distanciaM: number;
+  duracaoSeg: number;
+  iniciadoEm: string;
+};
+
+export type StravaSugestao = {
+  id: string;
+  alunoId: string;
+  treinoId: string;
+  atividadeStravaId: string;
+  score: number;
+  scoreBreakdown: Record<string, unknown>;
+  status: 'PENDENTE' | 'ACEITA' | 'REJEITADA' | 'EXPIRADA';
+  criadaEm: string;
+  resolvidaEm: string | null;
+  treino: StravaSugestaoTreino;
+  atividade: StravaSugestaoAtividade;
+};
+
+export async function listSugestoesStrava(opts: { signal?: AbortSignal } = {}): Promise<StravaSugestao[]> {
+  const { data } = await api.get<{ sugestoes: StravaSugestao[] }>('/strava/sugestoes', { signal: opts.signal });
+  return data.sugestoes;
+}
+
+export async function aceitarSugestaoStrava(id: string): Promise<{ ok: true; treinoId: string; sugestaoId: string }> {
+  const { data } = await api.post<{ ok: true; treinoId: string; sugestaoId: string }>(`/strava/sugestoes/${id}/aceitar`);
+  return data;
+}
+
+export async function rejeitarSugestaoStrava(id: string): Promise<{ ok: true; sugestaoId: string }> {
+  const { data } = await api.post<{ ok: true; sugestaoId: string }>(`/strava/sugestoes/${id}/rejeitar`);
+  return data;
+}
+
+// Desfazer Tier 1 — undo de auto-match. Backend zera o vínculo no Treino
+// + grava MatchRejeitado motivo='undone_tier1' (impede re-match imediato).
+export async function desfazerMatchStrava(treinoId: string): Promise<{ ok: true; treinoId: string }> {
+  const { data } = await api.post<{ ok: true; treinoId: string }>(`/strava/treinos/${treinoId}/desfazer-strava`);
+  return data;
 }
 
 // ── OAuth state — defesa contra Account Linking Hijacking ───────

@@ -70,6 +70,16 @@ export type HistoricoCarga = {
   treinoId: string;
 };
 
+// PR #41c — ACK em batch dos auto-matches Tier 1.
+// Chamado pelo Dashboard após exibir o toast "X autopreenchidos — Desfazer".
+// Backend marca stravaAutoMatchAck=true só nos treinos do próprio aluno
+// que ainda estão em false; cross-tenant / sem-vínculo viram no-op silencioso.
+export async function ackStravaAutoMatch(ids: string[]): Promise<{ acked: number }> {
+  if (ids.length === 0) return { acked: 0 };
+  const { data } = await api.post<{ acked: number }>('/treinos/strava-ack', { ids });
+  return data;
+}
+
 // Mapa { nomeNormalizado(lowercase) -> última execução do aluno }
 export async function getHistoricoCargas(
   nomes: string[],
