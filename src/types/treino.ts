@@ -339,6 +339,14 @@ export type Treino = {
   detalhes: TreinoDetalhes;
   iniciadoEm: string | null;
   finalizadoEm: string | null;
+  // PR #41b — vínculo Strava ↔ Treino (Tier 1 auto-match ou Tier 2 opt-in).
+  stravaActivityId: string | null;
+  // PR #41c — ACK do auto-match Tier 1.
+  // Tier 1 vincula via webhook silenciosamente → ack=false sinaliza
+  // "aluno ainda não viu". Dashboard filtra `stravaActivityId && !ack`
+  // para disparar toast "X autopreenchidos — Desfazer", depois bate
+  // POST /treinos/strava-ack pra zerar a flag.
+  stravaAutoMatchAck: boolean;
   criadoEm: string;
   atualizadoEm: string;
 };

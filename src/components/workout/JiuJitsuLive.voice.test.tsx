@@ -34,6 +34,8 @@ const TREINO: Treino = {
   detalhes: { tipo: 'jiu_jitsu', rolas: { rounds: 5, tempoRoundSeg: 300 } },
   iniciadoEm: null,
   finalizadoEm: null,
+  stravaActivityId: null,
+  stravaAutoMatchAck: true,
   criadoEm: new Date().toISOString(),
   atualizadoEm: new Date().toISOString(),
 };

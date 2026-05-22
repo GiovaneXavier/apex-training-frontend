@@ -33,6 +33,8 @@ const TREINO_BASE: Treino = {
   },
   iniciadoEm: null,
   finalizadoEm: null,
+  stravaActivityId: null,
+  stravaAutoMatchAck: true,
   criadoEm: new Date().toISOString(),
   atualizadoEm: new Date().toISOString(),
 };
