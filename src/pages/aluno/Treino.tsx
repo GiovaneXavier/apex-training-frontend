@@ -22,6 +22,9 @@ const NatacaoLive = lazy(() =>
 const HyroxLive = lazy(() =>
   import('@/components/workout/HyroxLive').then((m) => ({ default: m.HyroxLive })),
 );
+const JiuJitsuLive = lazy(() =>
+  import('@/components/workout/JiuJitsuLive').then((m) => ({ default: m.JiuJitsuLive })),
+);
 
 // Fallback inline — placeholder magro pra evitar criar chunk extra.
 // Tempo real de carga em 4G geralmente fica abaixo de 500ms (Live
@@ -34,6 +37,7 @@ function LiveFallback() {
   );
 }
 import { ReagendarButton } from '@/components/ReagendarButton';
+import { StravaVinculoBadge } from '@/components/workout/StravaVinculoBadge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getTreino } from '@/lib/api/treinos';
@@ -78,12 +82,13 @@ export default function AlunoTreino() {
 
   useEffect(() => {
     if (isDemo || !id) return;
-    let cancelled = false;
+    const ctrl = new AbortController();
     setLoading(true);
-    getTreino(id)
-      .then((t) => !cancelled && setTreino(t))
-      .catch((err) => !cancelled && setError(apiErrorMessage(err)))
-      .finally(() => !cancelled && setLoading(false));
+    getTreino(id, { signal: ctrl.signal })
+      .then((t) => { if (!ctrl.signal.aborted) setTreino(t); })
+      .catch((err) => { if (!ctrl.signal.aborted) setError(apiErrorMessage(err)); })
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
+    return () => ctrl.abort();
   }, [id, isDemo]);
 
   const setVariant = (v: WorkoutVariant) => {
@@ -96,6 +101,26 @@ export default function AlunoTreino() {
     next.set('density', d);
     setParams(next, { replace: true });
   };
+
+  // PR #41c — Badge "Vinculado via Strava" exibido em cima de qualquer
+  // modalidade quando o treino tem `stravaActivityId` preenchido (Tier 1
+  // automático ou Tier 2 aceito). Fixed top-left espelhando ReagendarButton
+  // no top-right. Renderiza nada quando sem vínculo.
+  const stravaBadge =
+    treino?.stravaActivityId ? (
+      <div className="fixed top-3 left-3 z-30 max-w-[calc(100vw-9rem)]">
+        <StravaVinculoBadge
+          treinoId={treino.id}
+          onDesvinculado={() =>
+            setTreino((t) =>
+              t
+                ? { ...t, stravaActivityId: null, status: 'PENDENTE', finalizadoEm: null }
+                : t,
+            )
+          }
+        />
+      </div>
+    ) : null;
 
   if (loading) {
     return (
@@ -133,6 +158,7 @@ export default function AlunoTreino() {
             onReagendado={(iso) => setTreino({ ...treino, dataAlvo: iso })}
           />
         )}
+        {stravaBadge}
         {/* Centraliza no desktop limitando a 480px; mobile ocupa 100% */}
         <div style={{ maxWidth: 480, height: '100%', margin: '0 auto', position: 'relative' }}>
           <WorkoutLive treino={treino} theme={theme} density={density} />
@@ -152,6 +178,7 @@ export default function AlunoTreino() {
             onReagendado={(iso) => setTreino({ ...treino, dataAlvo: iso })}
           />
         )}
+        {stravaBadge}
         <Suspense fallback={<LiveFallback />}>
           <CorridaLive treino={treino} alunoId={alunoIdAtual} />
         </Suspense>
@@ -170,6 +197,7 @@ export default function AlunoTreino() {
             onReagendado={(iso) => setTreino({ ...treino, dataAlvo: iso })}
           />
         )}
+        {stravaBadge}
         <Suspense fallback={<LiveFallback />}>
           <CiclismoLive treino={treino} />
         </Suspense>
@@ -188,6 +216,7 @@ export default function AlunoTreino() {
             onReagendado={(iso) => setTreino({ ...treino, dataAlvo: iso })}
           />
         )}
+        {stravaBadge}
         <Suspense fallback={<LiveFallback />}>
           <NatacaoLive treino={treino} />
         </Suspense>
@@ -206,8 +235,28 @@ export default function AlunoTreino() {
             onReagendado={(iso) => setTreino({ ...treino, dataAlvo: iso })}
           />
         )}
+        {stravaBadge}
         <Suspense fallback={<LiveFallback />}>
           <HyroxLive treino={treino} />
+        </Suspense>
+      </>
+    );
+  }
+
+  // Treino real: jiu-jitsu → JiuJitsuLive (diário pós-rola, PR #23)
+  if (!isDemo && treino && treino.detalhes.tipo === 'jiu_jitsu') {
+    return (
+      <>
+        {treino.status !== 'CONCLUIDO' && treino.status !== 'PULADO' && (
+          <ReagendarButton
+            treinoId={treino.id}
+            dataAtual={treino.dataAlvo}
+            onReagendado={(iso) => setTreino({ ...treino, dataAlvo: iso })}
+          />
+        )}
+        {stravaBadge}
+        <Suspense fallback={<LiveFallback />}>
+          <JiuJitsuLive treino={treino} />
         </Suspense>
       </>
     );
@@ -217,6 +266,7 @@ export default function AlunoTreino() {
   if (!isDemo && treino) {
     return (
       <div className="min-h-screen bg-bg text-ink p-6">
+        {stravaBadge}
         <Link to="/aluno/dashboard" className="text-mono text-[11px] uppercase tracking-wider text-ink-muted font-bold">
           ← Dashboard
         </Link>

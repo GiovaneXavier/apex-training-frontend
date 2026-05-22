@@ -20,6 +20,11 @@ export type NutriAlunoDetalhe = {
     pesoKg?: number | null;
     alturaCm?: number | null;
   };
+  // PR #18a — flag para gate visual. Hoje sempre `true` quando o
+  // detalhe carrega (backend retorna 403 se aceite não cravado), mas
+  // a flag viaja no payload pro front conseguir desabilitar botões
+  // de escrita caso o estado mude (defesa em profundidade UX).
+  aceitoPeloAluno: boolean;
   proximosTreinos: Treino[];
   proximasProvas: Prova[];
 };
@@ -38,7 +43,12 @@ export async function desvincularNutri(vinculoId: string): Promise<void> {
   await api.delete(`/nutri/vinculo/${vinculoId}`);
 }
 
-export async function getAlunoDetalheNutri(alunoId: string): Promise<NutriAlunoDetalhe> {
-  const { data } = await api.get<NutriAlunoDetalhe>(`/nutri/aluno/${alunoId}`);
+export async function getAlunoDetalheNutri(
+  alunoId: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<NutriAlunoDetalhe> {
+  const { data } = await api.get<NutriAlunoDetalhe>(`/nutri/aluno/${alunoId}`, {
+    signal: opts.signal,
+  });
   return data;
 }

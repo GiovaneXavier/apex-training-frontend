@@ -3,22 +3,42 @@ import { Link } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { getDashboard, type ProfessorDashboard } from '@/lib/api/professor';
-import { apiErrorMessage } from '@/lib/api';
+import {
+  getDashboard,
+  listAlertasProf,
+  type Alerta,
+  type AlertaSeveridade,
+  type AlertaTipo,
+  type ProfessorDashboard,
+} from '@/lib/api/professor';
+import { apiErrorMessage, isCancelError } from '@/lib/api';
 import { formatDate } from '@/lib/format';
+import { CoachBriefingCard } from '@/components/professor/CoachBriefingCard';
 
 export default function ProfDashboard() {
   const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
   const [stats, setStats] = useState<ProfessorDashboard | null>(null);
+  const [alertas, setAlertas] = useState<Alerta[]>([]);
+  const [loadingAlertas, setLoadingAlertas] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // PR #15 padronizado — AbortController no cleanup. Dashboard +
+  // alertas em paralelo: o painel pinta as duas seções
+  // independentemente, sem esperar um do outro.
   useEffect(() => {
-    let cancelled = false;
-    getDashboard()
-      .then((s) => !cancelled && setStats(s))
-      .catch((err) => !cancelled && setError(apiErrorMessage(err)));
-    return () => { cancelled = true; };
+    const ctrl = new AbortController();
+    Promise.allSettled([
+      getDashboard({ signal: ctrl.signal }).then(
+        (s) => setStats(s),
+        (err) => { if (!isCancelError(err)) setError(apiErrorMessage(err)); },
+      ),
+      listAlertasProf({ signal: ctrl.signal }).then(
+        (a) => setAlertas(a),
+        (err) => { if (!isCancelError(err)) setError(apiErrorMessage(err)); },
+      ).finally(() => { if (!ctrl.signal.aborted) setLoadingAlertas(false); }),
+    ]);
+    return () => ctrl.abort();
   }, []);
 
   const primeiroNome = user?.nome.split(' ')[0] ?? 'Professor';
@@ -58,6 +78,17 @@ export default function ProfDashboard() {
           <StatCard label="Concluídos na semana" value={stats?.concluidosSemana} />
           <StatCard label="Total prescritos" value={stats?.treinosPrescritos} />
         </div>
+
+        {/* PR #28 — Coach Briefing Semanal (IA). Topo da hierarquia visual
+            depois das stats secas — síntese deve preceder a lista crua de
+            alertas (que continua disponível abaixo). */}
+        <div className="mb-4">
+          <CoachBriefingCard />
+        </div>
+
+        {/* PR #17 — Radar de aderência. Aparece acima das ações pra ser
+            a primeira coisa que o prof vê ao abrir o painel. */}
+        <AlertasSection alertas={alertas} loading={loadingAlertas} />
 
         <div className="flex flex-col gap-2.5">
           <Link to="/professor/alunos" className="action-card">
@@ -113,6 +144,92 @@ export default function ProfDashboard() {
         }
         .action-card:hover { border-color: rgba(var(--ink), 0.4); }
       `}</style>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Alertas de aderência (PR #17)
+//
+// O agrupamento por severidade reflete a regra do produto: high vai pro
+// topo do painel pra ser visto primeiro. Limitamos a exibição (5 por
+// grupo + "ver mais") pra evitar painel infinito quando o coach tem
+// muitos alunos. Deep-link no card leva pro detalhe do aluno —
+// caminho natural pra ação (mandar áudio, reagendar treino).
+// ─────────────────────────────────────────────────────────────────────
+
+const SEVERIDADE_BORDER: Record<AlertaSeveridade, string> = {
+  high: 'border-l-danger',
+  medium: 'border-l-warn',
+  low: 'border-l-ink-subtle',
+};
+
+const TIPO_LABEL: Record<AlertaTipo, string> = {
+  INACTIVE_7D: 'Inativo',
+  MISSED_WORKOUT: 'Faltou',
+  STREAK_BROKEN: 'Streak',
+  MODALIDADE_GAP: 'Gap',
+};
+
+function AlertasSection({ alertas, loading }: { alertas: Alerta[]; loading: boolean }) {
+  const [verMais, setVerMais] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="mb-5 px-4 py-5 rounded-[14px] bg-surface border border-app text-ink-subtle text-[12px] text-center">
+        Carregando radar de aderência…
+      </div>
+    );
+  }
+  if (alertas.length === 0) {
+    return (
+      <div className="mb-5 px-4 py-4 rounded-[14px] bg-surface border border-app text-ink-subtle text-[12.5px] text-center">
+        Tudo em ordem — nenhum alerta nos alunos agora ✓
+      </div>
+    );
+  }
+
+  const LIMITE = 5;
+  const visiveis = verMais ? alertas : alertas.slice(0, LIMITE);
+  const restantes = alertas.length - visiveis.length;
+
+  return (
+    <div className="mb-5">
+      <div className="flex items-baseline justify-between mb-2">
+        <h2 className="text-[11px] uppercase tracking-[0.6px] text-ink-subtle font-bold text-mono">
+          Radar de aderência ({alertas.length})
+        </h2>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {visiveis.map((a, i) => (
+          <Link
+            key={`${a.alunoId}-${a.tipo}-${a.treinoId ?? i}`}
+            to={`/professor/aluno/${a.alunoId}`}
+            className={
+              'flex items-center justify-between gap-3 px-3 py-2.5 rounded-[10px] ' +
+              'bg-surface border border-app border-l-2 ' +
+              SEVERIDADE_BORDER[a.severidade]
+            }
+          >
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-semibold truncate">{a.alunoNome}</div>
+              <div className="text-[11.5px] text-ink-muted truncate">{a.detalhe}</div>
+            </div>
+            <span className="text-mono text-[9px] uppercase tracking-[0.6px] font-bold text-ink-subtle flex-shrink-0">
+              {TIPO_LABEL[a.tipo]}
+            </span>
+          </Link>
+        ))}
+        {restantes > 0 && (
+          <button
+            type="button"
+            onClick={() => setVerMais(true)}
+            className="text-[11px] uppercase tracking-wider font-bold text-accent text-center py-2"
+          >
+            + {restantes} alerta{restantes > 1 ? 's' : ''}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

@@ -45,8 +45,40 @@ export type AlunoDetalhe = {
   recordesRecentes: RecordePessoal[];
 };
 
-export async function getDashboard(): Promise<ProfessorDashboard> {
-  const { data } = await api.get<ProfessorDashboard>('/professor/dashboard');
+// PR #17 — Coach Analytics: alertas de aderência por aluno vinculado.
+// Contrato espelha o shape de `Alerta` no backend (services/coach.service.js).
+export type AlertaTipo =
+  | 'INACTIVE_7D'
+  | 'MISSED_WORKOUT'
+  | 'STREAK_BROKEN'
+  | 'MODALIDADE_GAP';
+
+export type AlertaSeveridade = 'high' | 'medium' | 'low';
+
+export type Alerta = {
+  alunoId: string;
+  alunoNome: string;
+  tipo: AlertaTipo;
+  severidade: AlertaSeveridade;
+  detalhe: string;
+  modalidade?: Modalidade;
+  treinoId?: string;
+  desde: string | null;
+};
+
+export async function listAlertasProf(
+  opts: { signal?: AbortSignal } = {},
+): Promise<Alerta[]> {
+  const { data } = await api.get<{ alertas: Alerta[] }>('/professor/alertas', {
+    signal: opts.signal,
+  });
+  return data.alertas;
+}
+
+export async function getDashboard(opts: { signal?: AbortSignal } = {}): Promise<ProfessorDashboard> {
+  const { data } = await api.get<ProfessorDashboard>('/professor/dashboard', {
+    signal: opts.signal,
+  });
   return data;
 }
 

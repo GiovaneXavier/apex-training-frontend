@@ -14,16 +14,29 @@
 import axios from 'axios';
 import { api } from './api';
 
-export type UploadResult = { url: string };
+export type UploadResult = { url: string; key: string };
+export type UploadKind = 'evolucao' | 'avatar' | 'plano-alimentar';
 
-const MAX_BYTES = 8 * 1024 * 1024; // 8MB
-
-const ACCEPTED_MIME = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/heic',
-]);
+// PR #18b — regras por kind espelham o backend (controllers/upload).
+// Tabela única evita drift entre o que o cliente valida cedo (UX) e o
+// que o backend valida tarde (segurança).
+const KIND_RULES: Record<UploadKind, { mimes: Set<string>; maxBytes: number; label: string }> = {
+  evolucao: {
+    mimes: new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic']),
+    maxBytes: 8 * 1024 * 1024,
+    label: 'imagem JPEG, PNG, WebP ou HEIC',
+  },
+  avatar: {
+    mimes: new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic']),
+    maxBytes: 8 * 1024 * 1024,
+    label: 'imagem JPEG, PNG, WebP ou HEIC',
+  },
+  'plano-alimentar': {
+    mimes: new Set(['application/pdf']),
+    maxBytes: 15 * 1024 * 1024,
+    label: 'PDF',
+  },
+};
 
 type PresignResponse = {
   uploadUrl: string;
@@ -33,28 +46,31 @@ type PresignResponse = {
   expiresIn: number;
 };
 
-function validateFile(file: File): void {
-  if (file.size > MAX_BYTES) {
-    throw new Error('Foto maior que 8MB. Tente reduzir antes de enviar.');
+function validateFile(file: File, kind: UploadKind): void {
+  const rule = KIND_RULES[kind];
+  if (file.size > rule.maxBytes) {
+    const mb = Math.round(rule.maxBytes / (1024 * 1024));
+    throw new Error(`Arquivo maior que ${mb}MB. Reduza antes de enviar.`);
   }
-  if (!ACCEPTED_MIME.has(file.type)) {
-    throw new Error('Selecione uma imagem JPEG, PNG, WebP ou HEIC.');
+  if (!rule.mimes.has(file.type)) {
+    throw new Error(`Selecione um ${rule.label}.`);
   }
 }
 
 /** Upload via S3 Presigned URL — produção. */
 export async function uploadFotoS3(
   file: File,
-  opts: { kind?: 'evolucao' | 'avatar'; onProgress?: (pct: number) => void } = {},
+  opts: { kind?: UploadKind; onProgress?: (pct: number) => void } = {},
 ): Promise<UploadResult> {
-  validateFile(file);
+  const kind = opts.kind ?? 'evolucao';
+  validateFile(file, kind);
 
   // 1) Pega a URL pré-assinada do nosso backend (autenticação via interceptor).
   const { data } = await api.get<PresignResponse>('/upload/presigned-url', {
     params: {
       contentType: file.type,
       contentLength: file.size,
-      kind: opts.kind ?? 'evolucao',
+      kind,
     },
   });
 
@@ -73,13 +89,14 @@ export async function uploadFotoS3(
   });
 
   // 3) URL final pública (CloudFront ou bucket) — é o que vai pra
-  // EvolucaoCorporal.fotoUrl no banco.
-  return { url: data.publicUrl };
+  // EvolucaoCorporal.fotoUrl no banco. PR #18b: retorna também a key
+  // pra plano alimentar gravar referência usada em delete/replace.
+  return { url: data.publicUrl, key: data.key };
 }
 
 /** Mantido apenas pra testes locais sem AWS configurado. */
-export async function uploadFotoMock(file: File): Promise<UploadResult> {
-  validateFile(file);
+export async function uploadFotoMock(file: File, kind: UploadKind = 'evolucao'): Promise<UploadResult> {
+  validateFile(file, kind);
   await new Promise((r) => setTimeout(r, 600));
   const url = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -87,12 +104,14 @@ export async function uploadFotoMock(file: File): Promise<UploadResult> {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-  return { url };
+  return { url, key: `mock/${file.name}` };
 }
 
 // Fachada pública. Em dev sem AWS, defina VITE_UPLOAD_MODE=mock no .env.local.
 export const uploadFoto: (
   file: File,
-  opts?: { kind?: 'evolucao' | 'avatar'; onProgress?: (pct: number) => void },
+  opts?: { kind?: UploadKind; onProgress?: (pct: number) => void },
 ) => Promise<UploadResult> =
-  import.meta.env.VITE_UPLOAD_MODE === 'mock' ? uploadFotoMock : uploadFotoS3;
+  import.meta.env.VITE_UPLOAD_MODE === 'mock'
+    ? (file, opts) => uploadFotoMock(file, opts?.kind)
+    : uploadFotoS3;

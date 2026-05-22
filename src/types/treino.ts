@@ -1,12 +1,17 @@
 // Tipos espelhados do backend (src/schemas/treino.schemas.js).
 // Mantém em sincronia manualmente — sem zod no front por enquanto.
 
+// PR #22 — alinhamento com enum Prisma + Zod do backend.
+// HYROX já existia no banco/Zod do schema (drift histórico).
+// JIU_JITSU entra agora pelo Sprint 8.
 export type Modalidade =
   | 'MUSCULACAO'
   | 'CORRIDA'
   | 'CICLISMO'
   | 'NATACAO'
   | 'TRIATHLON'
+  | 'HYROX'
+  | 'JIU_JITSU'
   | 'OUTRO';
 
 export type StatusTreino = 'PENDENTE' | 'EM_EXECUCAO' | 'CONCLUIDO' | 'PULADO';
@@ -272,6 +277,46 @@ export type DetalhesOutro = {
   realizado?: string | null;
 };
 
+// PR #23 — Jiu-Jitsu.
+export type JiuJitsuAquecimento = {
+  nome: string;
+  duracaoSeg?: number;
+  observacao?: string;
+};
+
+export type JiuJitsuDrill = {
+  movimento: string;
+  reps?: number;
+  duracaoSeg?: number;
+  observacao?: string;
+};
+
+export type JiuJitsuRolas = {
+  rounds: number;
+  tempoRoundSeg: number;
+  descansoSeg?: number;
+  observacao?: string;
+};
+
+export type DetalhesJiuJitsuRealizado = {
+  matTimeSegundos?: number;
+  roundsCompletos?: number;
+  finalizacoesFeitas?: number;
+  finalizacoesSofridas?: number;
+  /** 1..10 (inteiro). Slider único cobre sono + fadiga + humor. */
+  readinessRating?: number;
+  observacao?: string;
+};
+
+export type DetalhesJiuJitsu = {
+  tipo: 'jiu_jitsu';
+  aquecimento?: JiuJitsuAquecimento[];
+  drills?: JiuJitsuDrill[];
+  rolas?: JiuJitsuRolas;
+  observacao?: string;
+  realizado?: DetalhesJiuJitsuRealizado | null;
+};
+
 export type TreinoDetalhes =
   | DetalhesMusculacao
   | DetalhesCorrida
@@ -279,6 +324,7 @@ export type TreinoDetalhes =
   | DetalhesNatacao
   | DetalhesTriathlon
   | DetalhesHyrox
+  | DetalhesJiuJitsu
   | DetalhesOutro;
 
 // ── Entidade ───────────────────────────────────────────────────
@@ -293,9 +339,20 @@ export type Treino = {
   detalhes: TreinoDetalhes;
   iniciadoEm: string | null;
   finalizadoEm: string | null;
+  // PR #41b — vínculo Strava ↔ Treino (Tier 1 auto-match ou Tier 2 opt-in).
+  stravaActivityId: string | null;
+  // PR #41c — ACK do auto-match Tier 1.
+  // Tier 1 vincula via webhook silenciosamente → ack=false sinaliza
+  // "aluno ainda não viu". Dashboard filtra `stravaActivityId && !ack`
+  // para disparar toast "X autopreenchidos — Desfazer", depois bate
+  // POST /treinos/strava-ack pra zerar a flag.
+  stravaAutoMatchAck: boolean;
   criadoEm: string;
   atualizadoEm: string;
 };
+
+// PR #37 (Sprint 14) — Macro-ciclo Race A/B/C.
+export type ProvaPrioridade = 'A' | 'B' | 'C';
 
 export type Prova = {
   id: string;
@@ -303,8 +360,15 @@ export type Prova = {
   modalidade: Modalidade;
   nome: string;
   data: string;
+  // PR #37 — campos novos. Têm default no backend, então provas antigas
+  // do banco vêm com prioridade='C' e arquivada=false.
+  prioridade: ProvaPrioridade;
+  arquivada: boolean;
+  alvoTempo: string | null;
+  local: string | null;
   detalhes: Record<string, unknown>;
   criadoEm: string;
+  atualizadoEm: string;
 };
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -314,6 +378,8 @@ export const MODALIDADE_LABEL: Record<Modalidade, string> = {
   CICLISMO: 'Ciclismo',
   NATACAO: 'Natação',
   TRIATHLON: 'Triathlon',
+  HYROX: 'Hyrox',
+  JIU_JITSU: 'Jiu-Jitsu',
   OUTRO: 'Outro',
 };
 

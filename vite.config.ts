@@ -17,6 +17,14 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // PR #26 — migrado de generateSW → injectManifest pra suportar
+      // push/notificationclick listeners customizados em src/sw.ts.
+      // injectManifest substitui `self.__WB_MANIFEST` no build pelo array
+      // real de assets a precache; precacheAndRoute() no SW consome.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+
       // 'prompt' → SW novo fica em waiting; UI dispara skipWaiting via ReloadPrompt.
       // Aluno no meio do treino não perde estado por reload silencioso.
       registerType: 'prompt',
@@ -44,98 +52,20 @@ export default defineConfig({
           { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: {
-        // App Shell — todos os assets do build entram no precache.
-        // Garante que /aluno/treino/:id abra offline depois do primeiro acesso.
+
+      // injectManifest config — substitui o bloco `workbox.*` antigo.
+      // runtimeCaching foi portado 1:1 pra src/sw.ts usando workbox-* APIs.
+      injectManifest: {
+        // Mesmo padrão de globs do antigo bloco workbox.
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2}'],
-        // SPA fallback: qualquer rota client-side serve o index.html cacheado.
-        // É o que faz /aluno/treino/abc123 funcionar offline.
-        navigateFallback: '/index.html',
-        // Não interceptar chamadas à API — dados precisam ser frescos
-        // (ou tratados pelo offline store da própria app).
-        navigateFallbackDenylist: [/^\/api\//],
-        cleanupOutdatedCaches: true,
-        // 5 MB — cobre App Shell + ícones sem inflar o SW
+        // 5 MB — cobre App Shell + ícones sem inflar o manifest.
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        runtimeCaching: [
-          {
-            urlPattern: /\/api\/treinos(\/|\?|$)/,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'apex-api-treinos',
-              networkTimeoutSeconds: 3,
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 7 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // /api/rotinas/* — listagens, rotina por id, dia.
-            urlPattern: /\/api\/rotinas(\/|\?|$)/,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'apex-api-rotinas',
-              networkTimeoutSeconds: 3,
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 * 7 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // /api/auth/me — hidratação da sessão. Cache curto (1h) porque
-            // o cookie HttpOnly continua válido; estado do user muda lento.
-            urlPattern: /\/api\/auth\/me(\?|$)/,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'apex-api-me',
-              networkTimeoutSeconds: 3,
-              expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Dados secundários: aluno (vinculos/desempenho), rps, evolucoes,
-            // strava status/atividades. Cache curto (1 dia) — não mostrar
-            // streak/RP defasado.
-            urlPattern: /\/api\/(aluno|rps|evolucoes|strava)(\/|\?|$)/,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'apex-api-misc',
-              networkTimeoutSeconds: 3,
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-
-          // ── Fontes Google (CSS + arquivos .woff2) ─────────────────
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'google-fonts-stylesheets',
-              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-            },
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-webfonts',
-              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-
-          // ── Imagens (ícones, S3/CloudFront de evolução) ──────────
-          {
-            urlPattern: ({ request }) => request.destination === 'image',
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'apex-images',
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-        ],
       },
+
+      // O bloco `workbox:` antigo (generateSW) foi removido. Toda a lógica
+      // de runtimeCaching + navigateFallback agora vive em src/sw.ts via
+      // workbox-routing/strategies. Ver comentários lá pra mapeamento 1:1.
+
       devOptions: {
         // Desligado em dev pra evitar surpresa de cache durante desenvolvimento.
         // Pra testar PWA localmente: `npm run build && npm run preview`.
@@ -157,5 +87,10 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // PR #38/#39 — Vitest não deve tentar carregar specs Playwright
+    // (eles importam @playwright/test e quebram o resolver). E2E roda
+    // separado via `npm run test:e2e`. Mesma exclusão será aplicada pelo
+    // PR #38; ficar idempotente aqui evita teste vermelho desta branch.
+    exclude: ['node_modules', 'dist', 'tests-e2e/**'],
   },
 });

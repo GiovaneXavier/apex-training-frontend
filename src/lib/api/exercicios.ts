@@ -22,6 +22,30 @@ export const GRUPO_MUSCULAR_LABEL: Record<GrupoMuscular, string> = {
   OUTRO: 'Outro',
 };
 
+// PR #22 — domínio e tipo de movimento do catálogo (BJJ Expansion).
+export type DominioExercicio = 'MUSCULACAO' | 'JIU_JITSU' | 'MOBILIDADE' | 'OUTRO';
+
+export const DOMINIO_LABEL: Record<DominioExercicio, string> = {
+  MUSCULACAO: 'Musculação',
+  JIU_JITSU: 'Jiu-Jitsu',
+  MOBILIDADE: 'Mobilidade',
+  OUTRO: 'Outro',
+};
+
+export type TipoMovimento =
+  | 'DRILL' | 'PASSAGEM' | 'GUARDA' | 'RASPAGEM'
+  | 'SUBMISSAO' | 'ENTRADA' | 'SAIDA';
+
+export const TIPO_MOVIMENTO_LABEL: Record<TipoMovimento, string> = {
+  DRILL: 'Drill',
+  PASSAGEM: 'Passagem',
+  GUARDA: 'Guarda',
+  RASPAGEM: 'Raspagem',
+  SUBMISSAO: 'Submissão',
+  ENTRADA: 'Entrada',
+  SAIDA: 'Saída',
+};
+
 export type Exercicio = {
   id: string;
   nome: string;
@@ -30,6 +54,10 @@ export type Exercicio = {
   grupoMuscular: GrupoMuscular | null;
   equipamento: string | null;
   instrucoes: string | null;
+  // PR #22 — sempre presente (default MUSCULACAO no banco).
+  dominio: DominioExercicio;
+  posicao: string | null;
+  tipoMovimento: TipoMovimento | null;
   criadoPorId: string | null;
   criadoEm: string;
   atualizadoEm: string;
@@ -42,10 +70,28 @@ export type ExercicioInput = {
   grupoMuscular?: GrupoMuscular;
   equipamento?: string;
   instrucoes?: string;
+  dominio?: DominioExercicio;
+  posicao?: string;
+  tipoMovimento?: TipoMovimento;
 };
 
-export async function listExercicios(filters: { q?: string; grupo?: GrupoMuscular; limit?: number } = {}): Promise<Exercicio[]> {
-  const { data } = await api.get<Exercicio[]>('/exercicios', { params: filters });
+export type ListExerciciosFilters = {
+  q?: string;
+  grupo?: GrupoMuscular;
+  // PR #22 — filtros do picker BJJ.
+  dominio?: DominioExercicio;
+  tipoMovimento?: TipoMovimento;
+  limit?: number;
+};
+
+export async function listExercicios(
+  filters: ListExerciciosFilters = {},
+  opts: { signal?: AbortSignal } = {},
+): Promise<Exercicio[]> {
+  const { data } = await api.get<Exercicio[]>('/exercicios', {
+    params: filters,
+    signal: opts.signal,
+  });
   return data;
 }
 
