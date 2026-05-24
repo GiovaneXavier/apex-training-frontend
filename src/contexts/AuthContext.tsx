@@ -2,13 +2,20 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 
 import { api, setCsrfToken } from '@/lib/api';
 
-export type Role = 'ALUNO' | 'PROFESSOR' | 'NUTRICIONISTA';
+// ADMIN incluído após bug de login em produção: backend já emitia
+// `role: 'ADMIN'` (seed-admin), mas o tipo do front não cobria → switch
+// em dashboardPathFor caía sem retornar e `navigate(undefined)` travava
+// a tela após o POST /auth/login 200.
+export type Role = 'ALUNO' | 'PROFESSOR' | 'NUTRICIONISTA' | 'ADMIN';
 
 export type AuthUser = {
   id: string;
   email: string;
   nome: string;
   role: Role;
+  // `ativo` faz parte do payload do backend (User.ativo). Marcado opcional
+  // porque rotas legadas e o /auth/me podem não incluir em todas as versões.
+  ativo?: boolean;
   avatarUrl?: string | null;
   aluno?: { id: string; stravaConnected?: boolean } | null;
   professor?: { id: string } | null;
@@ -145,8 +152,13 @@ export function useAuth() {
 
 export function dashboardPathFor(role: Role): string {
   switch (role) {
-    case 'ALUNO': return '/aluno/dashboard';
+    case 'ADMIN': return '/admin/cockpit';
     case 'PROFESSOR': return '/professor/dashboard';
     case 'NUTRICIONISTA': return '/nutri/dashboard';
+    case 'ALUNO':
+    default:
+      // Default cobre ALUNO + qualquer role inesperada que o backend
+      // venha a emitir no futuro — evita repetir o bug do `undefined`.
+      return '/aluno/dashboard';
   }
 }
