@@ -28,12 +28,12 @@ export default defineConfig({
       // 'prompt' → SW novo fica em waiting; UI dispara skipWaiting via ReloadPrompt.
       // Aluno no meio do treino não perde estado por reload silencioso.
       registerType: 'prompt',
-      includeAssets: [
-        'favicon.svg',
-        'favicon.ico',
-        'robots.txt',
-        'apple-touch-icon.png',
-      ],
+      // Os PNGs (icon-192/512/maskable, favicon.ico/svg, apple-touch-icon)
+      // ainda não foram gerados — manifest apontava pra arquivos inexistentes
+      // e o console acusava 404/warning. Enquanto `npm run generate-pwa-assets`
+      // não roda numa esteira separada, fallback pro `logo.svg` (escalável,
+      // sirva qualquer tamanho). TODO: gerar PNGs e restaurar os 3 entries.
+      includeAssets: ['logo.svg', 'robots.txt'],
       manifest: {
         name: 'Apex Training',
         short_name: 'Apex',
@@ -47,9 +47,10 @@ export default defineConfig({
         orientation: 'portrait',
         categories: ['fitness', 'health', 'sports'],
         icons: [
-          { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-          { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          // SVG escalável cobre "any" + "maskable" enquanto os PNGs não saem.
+          // sizes:"any" diz ao browser "use em qualquer dimensão".
+          { src: '/logo.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+          { src: '/logo.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
         ],
       },
 
