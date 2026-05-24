@@ -6,6 +6,7 @@ import {
   aprovarAdminUser,
   atualizarStatusAdminUser,
   getAdminUserDetalhe,
+  removerVinculoProfessor,
   type AdminUserDetalhe,
   type AdminUserDetalheAluno,
   type AdminUserDetalheNutri,
@@ -13,6 +14,7 @@ import {
   type AdminUserListItem,
 } from '@/lib/api/admin';
 import { useAuth } from '@/contexts/AuthContext';
+import { TrocarProfessorModal } from '@/components/admin/TrocarProfessorModal';
 import { cn } from '@/lib/utils';
 
 // PR #43 — Drawer rico de detalhe + ações de aprovação/desativação.
@@ -42,6 +44,39 @@ export function UsuarioDetalheDrawer({ userId, onClose, onUserUpdated }: Props) 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
+  const [trocarOpen, setTrocarOpen] = useState(false);
+
+  // Re-fetch detalhe on demand (após confirmar troca/remoção de vínculo).
+  function refetchDetalhe() {
+    if (!userId) return;
+    getAdminUserDetalhe(userId)
+      .then(setData)
+      .catch((err) => setError(apiErrorMessage(err)));
+  }
+
+  async function onRemoverVinculo() {
+    // Backend recebe Aluno.id (não User.id). detalhe.alunoId é exposto
+    // pelo Bloco B (atualizado pra suportar Bloco C).
+    const alunoId =
+      data?.user.role === 'ALUNO' && 'alunoId' in data.detalhe
+        ? data.detalhe.alunoId
+        : null;
+    if (!alunoId) return;
+    const ok = window.confirm(
+      'Remover o vínculo com o professor atual? O aluno fica sem coach até nova atribuição.',
+    );
+    if (!ok) return;
+    setMutating(true);
+    try {
+      await removerVinculoProfessor(alunoId);
+      toast.success('Vínculo removido');
+      refetchDetalhe();
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    } finally {
+      setMutating(false);
+    }
+  }
 
   useEffect(() => {
     if (!userId) {
@@ -154,7 +189,12 @@ export function UsuarioDetalheDrawer({ userId, onClose, onUserUpdated }: Props) 
           {data && user && (
             <>
               <DadosBase user={user} />
-              <DetalheVariant data={data} />
+              <DetalheVariant
+                data={data}
+                onTrocarProfClick={() => setTrocarOpen(true)}
+                onRemoverProfClick={() => void onRemoverVinculo()}
+                mutating={mutating}
+              />
             </>
           )}
         </div>
@@ -197,6 +237,24 @@ export function UsuarioDetalheDrawer({ userId, onClose, onUserUpdated }: Props) 
           </footer>
         )}
       </aside>
+
+      {/* PR #44 — Modal de troca/atribuição de professor.
+          Renderizado fora do <aside> pra z-index ficar acima do drawer
+          + backdrop próprio cobrir o drawer durante a interação. */}
+      {trocarOpen &&
+        data?.user.role === 'ALUNO' &&
+        'alunoId' in data.detalhe && (
+          <TrocarProfessorModal
+            alunoId={data.detalhe.alunoId}
+            alunoNome={data.user.nome}
+            professorAtualNome={data.detalhe.vinculoProfessor?.nome ?? null}
+            onClose={() => setTrocarOpen(false)}
+            onConfirmed={() => {
+              setTrocarOpen(false);
+              refetchDetalhe();
+            }}
+          />
+        )}
     </>
   );
 }
@@ -223,22 +281,76 @@ function DadosBase({ user }: { user: AdminUserDetalhe['user'] }) {
   );
 }
 
-function DetalheVariant({ data }: { data: AdminUserDetalhe }) {
+function DetalheVariant({
+  data, onTrocarProfClick, onRemoverProfClick, mutating,
+}: {
+  data: AdminUserDetalhe;
+  onTrocarProfClick: () => void;
+  onRemoverProfClick: () => void;
+  mutating: boolean;
+}) {
   const { user, detalhe } = data;
-  if (user.role === 'ALUNO') return <DetalheAlunoSection d={detalhe as AdminUserDetalheAluno} />;
+  if (user.role === 'ALUNO') {
+    return (
+      <DetalheAlunoSection
+        d={detalhe as AdminUserDetalheAluno}
+        onTrocarProfClick={onTrocarProfClick}
+        onRemoverProfClick={onRemoverProfClick}
+        mutating={mutating}
+      />
+    );
+  }
   if (user.role === 'PROFESSOR') return <DetalheProfessorSection d={detalhe as AdminUserDetalheProfessor} />;
   if (user.role === 'NUTRICIONISTA') return <DetalheNutriSection d={detalhe as AdminUserDetalheNutri} />;
   return null;
 }
 
-function DetalheAlunoSection({ d }: { d: AdminUserDetalheAluno }) {
+function DetalheAlunoSection({
+  d, onTrocarProfClick, onRemoverProfClick, mutating,
+}: {
+  d: AdminUserDetalheAluno;
+  onTrocarProfClick: () => void;
+  onRemoverProfClick: () => void;
+  mutating: boolean;
+}) {
   if (!d || !('treinosCount' in d)) {
     return <EmptyHint>Perfil ALUNO sem dados adicionais.</EmptyHint>;
   }
+  const temProf = !!d.vinculoProfessor;
   return (
     <section className="space-y-2.5">
       <SectionTitle>Dados do aluno</SectionTitle>
-      <Linha label="Professor vinculado" value={d.vinculoProfessor?.nome ?? '—'} />
+
+      {/* Vínculo professor + ações inline (PR #44 — Bloco C) */}
+      <div className="flex items-baseline justify-between gap-3 text-[12.5px]">
+        <span className="text-ink-subtle text-mono text-[10.5px] uppercase tracking-wider font-bold shrink-0">
+          Professor vinculado
+        </span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-ink truncate">{d.vinculoProfessor?.nome ?? '—'}</span>
+          <button
+            type="button"
+            onClick={onTrocarProfClick}
+            disabled={mutating}
+            data-testid="drawer-prof-trocar"
+            className="text-mono text-[9.5px] uppercase tracking-wider font-bold text-accent hover:opacity-80 disabled:opacity-40"
+          >
+            {temProf ? 'Trocar' : 'Atribuir'}
+          </button>
+          {temProf && (
+            <button
+              type="button"
+              onClick={onRemoverProfClick}
+              disabled={mutating}
+              data-testid="drawer-prof-remover"
+              className="text-mono text-[9.5px] uppercase tracking-wider font-bold text-danger hover:opacity-80 disabled:opacity-40"
+            >
+              Remover
+            </button>
+          )}
+        </div>
+      </div>
+
       <Linha label="Nutricionista vinculado" value={d.vinculoNutri?.nome ?? '—'} />
       <Linha label="Treinos no histórico" value={d.treinosCount.toString()} />
       {d.ultimoTreino && (

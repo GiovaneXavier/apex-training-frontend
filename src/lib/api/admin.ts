@@ -70,6 +70,8 @@ export type AdminUsersListFilters = {
 // Detalhe — variant por role do alvo. Campos opcionais cobrem o shape
 // `{}` que o backend devolve quando o user não tem perfil correspondente.
 export type AdminUserDetalheAluno = {
+  // Aluno.id (não User.id) — usado pelo Bloco C (PUT vinculo-professor).
+  alunoId: string;
   vinculoProfessor: { id: string; nome: string } | null;
   vinculoNutri: { id: string; nome: string } | null;
   treinosCount: number;
@@ -158,5 +160,67 @@ export async function atualizarStatusAdminUser(
   ativo: boolean,
 ): Promise<AdminUserMutationResponse> {
   const { data } = await api.patch<AdminUserMutationResponse>(`/admin/users/${id}/status`, { ativo });
+  return data;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// PR #44 — Bloco C: Overrides de vínculo aluno↔professor
+// ──────────────────────────────────────────────────────────────────────
+
+export type ProfessorAtivo = {
+  id: string;   // Professor.id (não User.id) — uso direto no PUT do vínculo
+  nome: string;
+  email: string;
+};
+
+export async function listProfessoresAtivos(
+  search: string | undefined,
+  opts: { signal?: AbortSignal; limit?: number } = {},
+): Promise<ProfessorAtivo[]> {
+  const params: Record<string, string | number> = { limit: opts.limit ?? 20 };
+  if (search) params.search = search;
+  const { data } = await api.get<{ professores: ProfessorAtivo[] }>('/admin/professores/ativos', {
+    params,
+    signal: opts.signal,
+  });
+  return data.professores;
+}
+
+export type SubstituirVinculoResponse = {
+  success: true;
+  noop: boolean;
+  vinculo: { id: string; alunoId: string; professorId: string; criadoEm?: string };
+  removidos: number;
+};
+
+export async function substituirVinculoProfessor(
+  alunoId: string,
+  professorId: string,
+  motivo?: string,
+): Promise<SubstituirVinculoResponse> {
+  const body: { professorId: string; motivo?: string } = { professorId };
+  if (motivo) body.motivo = motivo;
+  const { data } = await api.put<SubstituirVinculoResponse>(
+    `/admin/alunos/${alunoId}/vinculo-professor`,
+    body,
+  );
+  return data;
+}
+
+export type RemoverVinculoResponse = {
+  success: true;
+  noop: boolean;
+  removidos: number;
+};
+
+export async function removerVinculoProfessor(
+  alunoId: string,
+  motivo?: string,
+): Promise<RemoverVinculoResponse> {
+  const body = motivo ? { motivo } : {};
+  const { data } = await api.delete<RemoverVinculoResponse>(
+    `/admin/alunos/${alunoId}/vinculo-professor`,
+    { data: body },
+  );
   return data;
 }
