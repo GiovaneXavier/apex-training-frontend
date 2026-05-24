@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 import { useAuth } from '@/contexts/AuthContext';
 import { useAdminMetrics } from '@/hooks/useAdminMetrics';
 import type { AdminMetrics } from '@/lib/api/admin';
@@ -114,17 +116,28 @@ function SecaoUsuarios({ m }: { m: AdminMetrics }) {
         <KpiCard label="Nutricionistas" value={usuarios.porRole.NUTRICIONISTA} />
       </div>
       {pendentesTotal > 0 && (
-        <div
+        <Link
+          to="/admin/usuarios"
           data-testid="admin-pendentes-chip"
-          className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-warn-bg text-warn text-[11.5px] font-bold tracking-tight"
+          className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-warn-bg text-warn text-[11.5px] font-bold tracking-tight hover:opacity-80"
         >
           <span aria-hidden>●</span>
           {pendentesTotal} profissional{pendentesTotal === 1 ? '' : 'is'} aguardando aprovação
           <span className="text-ink-subtle font-normal">
             ({usuarios.pendentes.professores} prof · {usuarios.pendentes.nutris} nutri)
           </span>
-        </div>
+          <span aria-hidden className="text-[14px]">→</span>
+        </Link>
       )}
+      <div className="mt-3">
+        <Link
+          to="/admin/usuarios"
+          data-testid="admin-link-usuarios"
+          className="text-mono text-[10.5px] uppercase tracking-wider text-ink-muted font-bold hover:text-ink"
+        >
+          Gerenciar usuários →
+        </Link>
+      </div>
     </section>
   );
 }
