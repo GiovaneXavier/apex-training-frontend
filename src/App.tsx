@@ -49,6 +49,8 @@ const ProfRotinaForm = lazy(() => import('./pages/professor/RotinaForm'));
 const NutriDashboard = lazy(() => import('./pages/nutricionista/Dashboard'));
 const NutriAlunoDetalhe = lazy(() => import('./pages/nutricionista/AlunoDetalhe'));
 
+const AdminCockpit = lazy(() => import('./pages/admin/Cockpit'));
+
 function RouteFallback() {
   // Spinner mínimo. Inline pra não criar mais um chunk só pra fallback.
   return (
@@ -168,6 +170,11 @@ export default function App() {
         <Route
           path="/nutri/aluno/:id"
           element={<ProtectedRoute roles={['NUTRICIONISTA']}><NutriAlunoDetalhe /></ProtectedRoute>}
+        />
+
+        <Route
+          path="/admin/cockpit"
+          element={<ProtectedRoute roles={['ADMIN']}><AdminCockpit /></ProtectedRoute>}
         />
 
         <Route path="*" element={<NotFound />} />
