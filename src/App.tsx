@@ -50,6 +50,8 @@ const NutriDashboard = lazy(() => import('./pages/nutricionista/Dashboard'));
 const NutriAlunoDetalhe = lazy(() => import('./pages/nutricionista/AlunoDetalhe'));
 
 const AdminCockpit = lazy(() => import('./pages/admin/Cockpit'));
+const AdminUsuarios = lazy(() => import('./pages/admin/Usuarios'));
+const AdminAuditoria = lazy(() => import('./pages/admin/Auditoria'));
 
 function RouteFallback() {
   // Spinner mínimo. Inline pra não criar mais um chunk só pra fallback.
@@ -175,6 +177,14 @@ export default function App() {
         <Route
           path="/admin/cockpit"
           element={<ProtectedRoute roles={['ADMIN']}><AdminCockpit /></ProtectedRoute>}
+        />
+        <Route
+          path="/admin/usuarios"
+          element={<ProtectedRoute roles={['ADMIN']}><AdminUsuarios /></ProtectedRoute>}
+        />
+        <Route
+          path="/admin/auditoria"
+          element={<ProtectedRoute roles={['ADMIN']}><AdminAuditoria /></ProtectedRoute>}
         />
 
         <Route path="*" element={<NotFound />} />
