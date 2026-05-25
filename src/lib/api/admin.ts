@@ -224,3 +224,87 @@ export async function removerVinculoProfessor(
   );
   return data;
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// PR #45 — Bloco D: Audit log viewer
+// ──────────────────────────────────────────────────────────────────────
+
+// Actions canônicas — espelha src/lib/auditLog.js (AUDIT_ACTIONS).
+// Manter sincronizado com o backend. String union pra dropdown tipado.
+export type AuditAction =
+  | 'vinculo.criar_prof'
+  | 'vinculo.quebrar_prof'
+  | 'user.aprovar'
+  | 'user.ativar'
+  | 'user.desativar'
+  | 'auth.login'
+  | 'auth.login_falhou'
+  | 'auth.logout';
+
+export type AuditLogEntry = {
+  id: string;
+  action: AuditAction | string;  // string fallback pra forward compat
+  entityType: string;
+  entityId: string;
+  payload: Record<string, unknown> | null;
+  atorUserId: string;
+  ip: string | null;
+  userAgent: string | null;
+  criadoEm: string;
+  ator: {
+    id: string;
+    nome: string;
+    email: string;
+    role: Role;
+  };
+};
+
+export type AuditLogListResponse = {
+  logs: AuditLogEntry[];
+  proximoCursor: string | null;
+  temMais: boolean;
+};
+
+export type AuditLogFilters = {
+  action?: string;
+  entityType?: string;
+  entityId?: string;
+  atorUserId?: string;
+  desde?: string;
+  ate?: string;
+  limit?: number;
+  cursor?: string | null;
+};
+
+export async function listAuditLogs(
+  filters: AuditLogFilters = {},
+  opts: { signal?: AbortSignal } = {},
+): Promise<AuditLogListResponse> {
+  const params: Record<string, string | number> = {};
+  if (filters.limit) params.limit = filters.limit;
+  if (filters.cursor) params.cursor = filters.cursor;
+  if (filters.action) params.action = filters.action;
+  if (filters.entityType) params.entityType = filters.entityType;
+  if (filters.entityId) params.entityId = filters.entityId;
+  if (filters.atorUserId) params.atorUserId = filters.atorUserId;
+  if (filters.desde) params.desde = filters.desde;
+  if (filters.ate) params.ate = filters.ate;
+  const { data } = await api.get<AuditLogListResponse>('/admin/audit', {
+    params,
+    signal: opts.signal,
+  });
+  return data;
+}
+
+// Catálogo display-friendly de actions — usado pelo filter dropdown.
+// Label PT-BR + categoria visual.
+export const AUDIT_ACTION_LABELS: Record<string, { label: string; group: string }> = {
+  'vinculo.criar_prof': { label: 'Vínculo criado', group: 'Vínculos' },
+  'vinculo.quebrar_prof': { label: 'Vínculo quebrado', group: 'Vínculos' },
+  'user.aprovar': { label: 'Usuário aprovado', group: 'Usuários' },
+  'user.ativar': { label: 'Usuário ativado', group: 'Usuários' },
+  'user.desativar': { label: 'Usuário desativado', group: 'Usuários' },
+  'auth.login': { label: 'Login', group: 'Autenticação' },
+  'auth.login_falhou': { label: 'Login falhou', group: 'Autenticação' },
+  'auth.logout': { label: 'Logout', group: 'Autenticação' },
+};

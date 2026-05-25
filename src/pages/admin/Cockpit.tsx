@@ -129,13 +129,20 @@ function SecaoUsuarios({ m }: { m: AdminMetrics }) {
           <span aria-hidden className="text-[14px]">→</span>
         </Link>
       )}
-      <div className="mt-3">
+      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
         <Link
           to="/admin/usuarios"
           data-testid="admin-link-usuarios"
           className="text-mono text-[10.5px] uppercase tracking-wider text-ink-muted font-bold hover:text-ink"
         >
           Gerenciar usuários →
+        </Link>
+        <Link
+          to="/admin/auditoria"
+          data-testid="admin-link-auditoria"
+          className="text-mono text-[10.5px] uppercase tracking-wider text-ink-muted font-bold hover:text-ink"
+        >
+          Ver auditoria →
         </Link>
       </div>
     </section>
